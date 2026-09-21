@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="VibeVault — Shared photo scrapbooks for friends, trips, and memories." />
+  <meta name="theme-color" content="#C85A32" />
+
+  <title>VibeVault — Shared Photo Scrapbooks</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>" />
+
+  <!-- Google Fonts: Newsreader (Editorial Serif) + Plus Jakarta Sans & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body class="antialiased">
+  <!-- App Shell -->
+  <div id="app">
+    <!-- Loading overlay -->
+    <div id="app-loader" class="app-loader">
+      <div class="loader-content">
+        <div class="loader-logo">🖼️</div>
+        <h1 class="loader-title">VibeVault</h1>
+        <div class="loader-spinner">
+          <div class="spinner-ring"></div>
+        </div>
+        <p class="loader-subtitle">Gathering memories...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Emoji Layer -->
+  <div id="emoji-layer" class="emoji-layer"></div>
+
+  <!-- Main Entry Script -->
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

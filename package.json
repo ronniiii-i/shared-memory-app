@@ -1,0 +1,25 @@
+{
+  "name": "vibevault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A highly interactive shared photo album web application",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n fe,be -c cyan,magenta \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "npm -w frontend run dev",
+    "dev:backend": "npm -w backend run dev",
+    "build:frontend": "npm -w frontend run build",
+    "build:backend": "npm -w backend run build",
+    "db:generate": "npm -w backend run db:generate",
+    "db:migrate": "npm -w backend run db:migrate",
+    "db:push": "npm -w backend run db:push",
+    "db:studio": "npm -w backend run db:studio",
+    "db:seed": "npm -w backend run db:seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

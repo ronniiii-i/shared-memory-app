@@ -44,8 +44,8 @@ export function openAuthModal(initialTab = 'login') {
         </div>
 
         <div>
-          <h3 class="font-serif-heading font-bold text-2xl text-heading">Welcome to VibeVault</h3>
-          <p class="text-xs text-muted mt-1">Shared photo scrapbooks for you & your crew</p>
+          <h3 class="font-serif-heading font-bold text-2xl text-heading">Welcome to Memora</h3>
+          <p class="text-xs text-muted mt-1">A collaborative space for collecting and reliving shared moments</p>
         </div>
 
         <!-- Auth Tabs Switcher -->

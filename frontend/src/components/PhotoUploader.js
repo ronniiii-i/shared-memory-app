@@ -23,16 +23,16 @@ export class PhotoUploader extends UIComponent {
     if (dropZone) {
       this.on(dropZone, 'dragover', (e) => {
         e.preventDefault();
-        dropZone.classList.add('border-purple-500', 'bg-purple-500/10');
+        dropZone.classList.add('is-dragging');
       });
 
       this.on(dropZone, 'dragleave', () => {
-        dropZone.classList.remove('border-purple-500', 'bg-purple-500/10');
+        dropZone.classList.remove('is-dragging');
       });
 
       this.on(dropZone, 'drop', (e) => {
         e.preventDefault();
-        dropZone.classList.remove('border-purple-500', 'bg-purple-500/10');
+        dropZone.classList.remove('is-dragging');
         if (e.dataTransfer.files.length > 0) {
           this.handleFileSelect(e.dataTransfer.files);
         }
@@ -90,39 +90,39 @@ export class PhotoUploader extends UIComponent {
 
   render() {
     return `
-      <div class="glass-panel p-8 rounded-3xl border border-slate-800 shadow-2xl max-w-xl mx-auto">
-        <h3 class="font-bold text-lg text-white mb-2 flex items-center gap-2 font-heading">
-          <i data-lucide="sparkles" class="w-5 h-5 text-purple-400"></i>
-          <span>Add Photos to Scrapbook</span>
+      <div class="memora-panel memora-upload-panel max-w-xl mx-auto">
+        <div class="memora-panel-mark"><i data-lucide="image-plus"></i></div>
+        <h3 class="font-serif-heading text-2xl font-bold text-heading mb-2 flex items-center gap-2">
+          <span>Add to the memory table</span>
         </h3>
-        <p class="text-xs text-slate-400 mb-6 leading-relaxed">
-          Photos are compressed client-side to lightweight WebP files and uploaded directly to Cloudflare R2 zero-cost storage.
+        <p class="text-sm text-muted mb-6 leading-relaxed">
+          Bring in the photographs that belong to this moment. They will be available in the gallery and on every scrapbook page.
         </p>
 
-        <div id="drop-zone" class="border-2 border-dashed border-slate-700 hover:border-purple-400 rounded-2xl p-10 text-center transition-all cursor-pointer bg-slate-950/40">
+        <div id="drop-zone" class="memora-drop-zone">
           <input type="file" id="photo-file-input" multiple accept="image/*" class="hidden" aria-label="Upload photo file selector" />
 
           ${!this.isUploading ? `
             <label for="photo-file-input" class="cursor-pointer block">
-              <div class="w-14 h-14 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center mx-auto mb-4 border border-purple-500/30">
+              <div class="memora-drop-mark">
                 <i data-lucide="upload-cloud" class="w-7 h-7"></i>
               </div>
-              <p class="text-sm font-semibold text-slate-200">Drag & drop photos here, or <span class="text-purple-400 underline">browse</span></p>
-              <p class="text-xs text-slate-500 mt-1">Supports PNG, JPG, WebP</p>
+              <p class="text-sm font-semibold text-main">Drop photographs here, or <span class="memora-accent-underline">choose from your device</span></p>
+              <p class="text-xs text-muted mt-1">JPG, PNG, or WebP</p>
             </label>
           ` : `
             <div class="py-4">
               <div class="loader-spinner mx-auto mb-3">
                 <div class="spinner-ring"></div>
               </div>
-              <p class="text-xs font-semibold text-purple-300 animate-pulse">${this.uploadProgress}</p>
+              <p class="text-xs font-semibold text-[var(--accent-sienna)] animate-pulse">${this.uploadProgress}</p>
             </div>
           `}
         </div>
 
         <div class="mt-6">
-          <label for="photo-caption-input" class="block text-xs font-semibold text-slate-300 mb-1.5">Photo Caption (Optional)</label>
-          <input type="text" id="photo-caption-input" placeholder="Add a story or caption for this photo..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-all" />
+          <label for="photo-caption-input" class="block text-xs font-semibold text-main mb-1.5">A note for this photograph <span class="text-muted font-normal">optional</span></label>
+          <input type="text" id="photo-caption-input" placeholder="A place, a feeling, an inside joke..." class="memora-input w-full" />
         </div>
       </div>
     `;

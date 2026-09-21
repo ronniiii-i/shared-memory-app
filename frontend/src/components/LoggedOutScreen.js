@@ -42,7 +42,7 @@ export class LoggedOutScreen extends UIComponent {
       <main class="session-screen">
         <section class="session-panel" aria-labelledby="session-title">
           <div class="session-icon"><i data-lucide="log-in" aria-hidden="true"></i></div>
-          <p class="session-eyebrow">VibeVault</p>
+          <p class="session-eyebrow">Memora</p>
           <h1 id="session-title">Your session has ended</h1>
           <p>For your security, you have been signed out. Sign in again to return to your albums.</p>
           <div class="session-actions">

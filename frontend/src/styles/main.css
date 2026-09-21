@@ -109,6 +109,479 @@
   color: var(--text-muted);
 }
 
+/* Memora's paper-and-ink surfaces */
+:root {
+  --accent-leaf: #55745a;
+  --paper-wash: #f3eadc;
+}
+.memora-panel {
+  position: relative;
+  padding: clamp(1.35rem, 4vw, 2rem);
+  color: var(--text-main);
+  background: linear-gradient(
+    145deg,
+    var(--bg-surface) 0%,
+    color-mix(in srgb, var(--paper-wash) 12%, var(--bg-surface)) 100%
+  );
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  box-shadow: 0 16px 40px rgba(55, 37, 25, 0.12);
+}
+.memora-panel::before {
+  position: absolute;
+  top: 0.8rem;
+  right: 1.1rem;
+  width: 2.2rem;
+  height: 0.35rem;
+  content: "";
+  background: var(--accent-sienna);
+  opacity: 0.65;
+  transform: rotate(-3deg);
+}
+.memora-panel-mark {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 1rem;
+  color: white;
+  background: var(--accent-sienna);
+  border-radius: 0.7rem 0.9rem 0.65rem 0.8rem;
+  box-shadow: 0 5px 0
+    color-mix(in srgb, var(--accent-terracotta) 65%, transparent);
+  transform: rotate(-3deg);
+}
+.memora-panel-mark svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.memora-drop-zone {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--paper-wash) 20%, transparent);
+  border: 1px dashed var(--border-strong);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+.memora-drop-zone:hover,
+.memora-drop-zone.is-dragging {
+  background: color-mix(in srgb, var(--accent-sienna) 11%, transparent);
+  border-color: var(--accent-sienna);
+  transform: translateY(-2px);
+}
+.memora-drop-mark {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 1rem;
+  color: var(--accent-sienna);
+  background: var(--paper-wash);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+}
+.memora-accent-underline {
+  color: var(--accent-sienna);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.memora-input {
+  min-height: 2.7rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 0.55rem;
+  font-size: 0.78rem;
+}
+.memora-input:focus {
+  outline: none;
+  border-color: var(--accent-sienna);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--accent-sienna) 15%, transparent);
+}
+.memora-button {
+  min-height: 2.7rem;
+  padding: 0.7rem 0.9rem;
+  color: white;
+  background: var(--accent-sienna);
+  border: 1px solid var(--accent-sienna);
+  border-radius: 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.memora-button:hover {
+  background: var(--accent-terracotta);
+}
+.memora-button-quiet {
+  color: var(--text-main);
+  background: transparent;
+  border-color: var(--border-color);
+}
+.memora-button-quiet:hover {
+  color: white;
+  background: var(--accent-sienna);
+}
+.memora-recap-panel {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-leaf) 12%, var(--bg-surface)),
+    var(--bg-surface)
+  );
+}
+.memora-recap-panel::before {
+  background: var(--accent-leaf);
+}
+.memora-recap-copy {
+  padding: 1.15rem;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--paper-wash) 18%, transparent);
+  border-left: 3px solid var(--accent-leaf);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+.memora-recap-copy strong {
+  color: var(--accent-leaf);
+  font-weight: 800;
+}
+
+/* Consumer-facing Memora welcome page */
+.memora-landing {
+  overflow: hidden;
+  color: var(--text-main);
+  background:
+    radial-gradient(
+      circle at 80% 8%,
+      rgba(217, 107, 67, 0.14),
+      transparent 25rem
+    ),
+    var(--bg-primary);
+}
+.memora-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(25rem, 0.85fr);
+  align-items: center;
+  gap: clamp(2rem, 7vw, 7rem);
+  max-width: 76rem;
+  min-height: 42rem;
+  margin: 0 auto;
+  padding: clamp(3rem, 8vw, 7rem) 1.5rem;
+}
+.memora-hero-copy {
+  max-width: 38rem;
+}
+.memora-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  color: var(--accent-sienna);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.memora-eyebrow svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+.memora-hero h1 {
+  max-width: 11ch;
+  margin: 0;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(3.5rem, 8vw, 7.25rem);
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+.memora-hero-lede {
+  max-width: 32rem;
+  margin: 1.75rem 0 0;
+  color: var(--text-muted);
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  line-height: 1.65;
+}
+.memora-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+.memora-primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 3.2rem;
+  padding: 0.85rem 1.15rem;
+  color: white;
+  background: var(--accent-sienna);
+  border: 1px solid var(--accent-sienna);
+  border-radius: 0.65rem;
+  box-shadow: 0 6px 0 var(--accent-terracotta);
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.memora-primary-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 0 var(--accent-terracotta);
+}
+.memora-primary-action:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 var(--accent-terracotta);
+}
+.memora-primary-action svg {
+  width: 1rem;
+  height: 1rem;
+}
+.memora-action-note {
+  max-width: 12rem;
+  color: var(--text-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.95rem;
+  font-style: italic;
+  line-height: 1.15;
+}
+.memora-hero-art {
+  position: relative;
+  min-height: 30rem;
+}
+.memora-photo-stack {
+  position: absolute;
+  inset: 2rem 2rem 2rem 1rem;
+}
+.memora-photo {
+  position: absolute;
+  width: 72%;
+  height: 22rem;
+  object-fit: cover;
+  border: 0.7rem solid var(--polaroid-bg);
+  box-shadow: 0 1.5rem 2.5rem rgba(40, 25, 17, 0.2);
+}
+.memora-photo-back {
+  top: 0;
+  right: 0;
+  transform: rotate(7deg);
+}
+.memora-photo-front {
+  bottom: 0;
+  left: 0;
+  transform: rotate(-5deg);
+}
+.memora-photo-caption {
+  position: absolute;
+  right: 7%;
+  bottom: 0.4rem;
+  z-index: 2;
+  color: var(--polaroid-text);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.1rem;
+  font-style: italic;
+  transform: rotate(-5deg);
+}
+.memora-note {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.8rem;
+  color: #4a3b31;
+  background: #f0d88d;
+  box-shadow: 0 0.5rem 1rem rgba(50, 31, 19, 0.12);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+.memora-note svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.memora-note-one {
+  top: 1rem;
+  left: 0;
+  transform: rotate(-7deg);
+}
+.memora-note-two {
+  right: 0;
+  bottom: 2.5rem;
+  background: #b9d0b1;
+  transform: rotate(5deg);
+}
+.memora-belief-band {
+  max-width: 58rem;
+  margin: 0 auto;
+  padding: 5rem 1.5rem;
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+}
+.memora-belief-band h2,
+.memora-section-heading h2,
+.memora-final-cta h2 {
+  max-width: 18ch;
+  margin: 0 auto;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(2.2rem, 5vw, 4.5rem);
+  font-weight: 600;
+  line-height: 0.98;
+}
+.memora-belief-band > p:last-child {
+  max-width: 32rem;
+  margin: 1rem auto 0;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+.memora-flow {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 5rem 1.5rem;
+}
+.memora-section-heading {
+  margin-bottom: 2.5rem;
+}
+.memora-section-heading h2 {
+  margin: 0;
+  max-width: 14ch;
+}
+.memora-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  background: var(--border-color);
+  border: 1px solid var(--border-color);
+}
+.memora-flow-item {
+  position: relative;
+  min-height: 15rem;
+  padding: 1.75rem;
+  background: var(--bg-surface);
+}
+.memora-flow-item:nth-child(2) {
+  background: color-mix(in srgb, var(--paper-wash) 18%, var(--bg-surface));
+}
+.memora-flow-item > svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 2rem 0 1rem;
+  color: var(--accent-sienna);
+}
+.memora-flow-item h3 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.memora-flow-item p {
+  max-width: 18rem;
+  margin: 0.55rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.memora-step-number {
+  color: var(--text-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1rem;
+  font-style: italic;
+}
+.memora-quote-section {
+  max-width: 55rem;
+  margin: 0 auto;
+  padding: 5rem 1.5rem;
+  text-align: center;
+}
+.memora-quote-section blockquote {
+  margin: 0;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1;
+}
+.memora-quote-section p {
+  margin-top: 1rem;
+  color: var(--accent-sienna);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.memora-final-cta {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 5rem 1.5rem 6rem;
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+}
+.memora-final-cta h2 {
+  margin-bottom: 1.5rem;
+}
+.memora-landing-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 2rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.72rem;
+}
+.memora-landing-footer strong {
+  color: var(--text-heading);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 800px) {
+  .memora-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding-top: 3rem;
+  }
+  .memora-hero h1 {
+    max-width: 10ch;
+    font-size: clamp(3.5rem, 15vw, 6rem);
+  }
+  .memora-hero-art {
+    min-height: 27rem;
+  }
+  .memora-flow-grid {
+    grid-template-columns: 1fr;
+  }
+  .memora-flow-item {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .memora-hero {
+    padding-inline: 1rem;
+  }
+  .memora-hero-art {
+    min-height: 23rem;
+  }
+  .memora-photo {
+    height: 17rem;
+    border-width: 0.5rem;
+  }
+  .memora-note {
+    font-size: 0.75rem;
+  }
+  .memora-note-two {
+    right: -0.2rem;
+  }
+  .memora-landing-footer {
+    flex-direction: column;
+  }
+}
+
 /* App Loader Overlay */
 .app-loader {
   position: fixed;
@@ -746,6 +1219,12 @@
   background-size: 18px 18px;
   border: 1px solid var(--border-color);
   border-radius: 0.8rem;
+}
+.scrapbook-canvas-stage.is-canvas-locked .scrapbook-fabric-wrapper,
+.scrapbook-canvas-stage.is-canvas-locked .upper-canvas,
+.scrapbook-canvas-stage.is-canvas-locked .lower-canvas {
+  pointer-events: none !important;
+  cursor: default !important;
 }
 .scrapbook-canvas-stage.editor-mode-select .scrapbook-fabric-wrapper {
   cursor: default;

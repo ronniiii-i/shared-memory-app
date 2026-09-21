@@ -34,12 +34,12 @@ export class Navbar extends UIComponent {
 
     return `
       <header class="sticky top-0 z-50 editorial-card border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between backdrop-blur-xl">
-        <a href="#/" class="flex items-center gap-3 group focus:outline-none rounded-xl p-1 z-10" aria-label="VibeVault Home">
+        <a href="#/" class="flex items-center gap-3 group focus:outline-none rounded-xl p-1 z-10" aria-label="Memora Home">
           <div class="w-8 h-8 rounded-lg bg-[var(--accent-sienna)] flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
             <i data-lucide="camera" class="w-4 h-4"></i>
           </div>
           <span class="font-serif-heading font-bold text-xl tracking-tight text-heading">
-            VibeVault
+            Memora
           </span>
         </a>
 

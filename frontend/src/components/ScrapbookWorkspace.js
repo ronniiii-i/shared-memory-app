@@ -193,7 +193,11 @@ export class ScrapbookWorkspace extends UIComponent {
     });
     this.canvas.wrapperEl.classList.add('scrapbook-fabric-wrapper');
     this.canvas.wrapperEl.classList.add('editor-mode-select');
-    this.setEditorMode(this.editorMode);
+    if (this.activePage.isLocked) {
+      this.setLockedCanvasState(true);
+    } else {
+      this.setEditorMode(this.editorMode);
+    }
     this.canvas.on('object:modified', () => this.recordHistory());
     this.canvas.on('object:added', ({ target }) => {
       if (target) this.applySelectionStyle(target);
@@ -224,6 +228,17 @@ export class ScrapbookWorkspace extends UIComponent {
     this.canvas.requestRenderAll();
     this.fitCanvas();
     this.updateSelectionControls();
+  }
+
+  setLockedCanvasState(isLocked) {
+    if (!this.canvas) return;
+    this.canvas.isDrawingMode = false;
+    this.canvas.selection = false;
+    this.canvas.skipTargetFind = true;
+    this.canvas.discardActiveObject();
+    this.canvas.setCursor('default');
+    this.canvas.wrapperEl.classList.toggle('is-canvas-locked', isLocked);
+    this.$('.scrapbook-canvas-stage')?.classList.toggle('is-canvas-locked', isLocked);
   }
 
   async restoreElement(element) {
@@ -698,6 +713,8 @@ export class ScrapbookWorkspace extends UIComponent {
 
   setEditorMode(mode) {
     if (!this.canvas || this.activePage?.isLocked) return;
+    this.canvas.wrapperEl.classList.remove('is-canvas-locked');
+    this.$('.scrapbook-canvas-stage')?.classList.remove('is-canvas-locked');
     this.editorMode = mode;
     this.isDrawing = mode === 'draw';
     this.canvas.isDrawingMode = this.isDrawing;

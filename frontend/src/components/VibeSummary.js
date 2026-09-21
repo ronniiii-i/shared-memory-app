@@ -29,23 +29,23 @@ export class VibeSummary extends UIComponent {
       ? `@${Array.from(uploaderSet)[0]}`
       : `${uploaderSet.size} creators`;
 
-    let summaryText = `✨ **"${this.albumTitle}" Vibe Report**: Across ${totalPhotos} captured moments, ${contributorText} brought this album to life! `;
+    let summaryText = `**"${this.albumTitle}" — a little look back**: Across ${totalPhotos} captured moments, ${contributorText} helped bring this album to life. `;
 
     if (busiestDate) {
       summaryText += `The busiest day was **${busiestDate[0]}** with ${busiestDate[1]} drops. `;
     }
 
     if (totalReactions > 0) {
-      summaryText += `It sparked 🔥 **${totalReactions} live reactions** `;
+      summaryText += `It sparked **${totalReactions} reactions** `;
     }
 
     if (totalVoiceNotes > 0) {
-      summaryText += `and 🎙️ **${totalVoiceNotes} voice notes**. `;
+      summaryText += `and **${totalVoiceNotes} voice notes**. `;
     } else {
       summaryText += `. `;
     }
 
-    summaryText += `Overall Vibe Rating: **10/10 Pure Energy ⚡**`;
+    summaryText += `The memory is still warm.`;
 
     return summaryText;
   }
@@ -54,19 +54,18 @@ export class VibeSummary extends UIComponent {
     const summaryMarkdown = this.generateSummary();
 
     return `
-      <div class="glass-panel p-8 rounded-3xl border border-purple-500/30 bg-gradient-to-br from-purple-950/30 via-slate-900/60 to-pink-950/30 shadow-2xl max-w-xl mx-auto my-4">
+      <div class="memora-panel memora-recap-panel max-w-xl mx-auto my-4">
         <div class="flex items-center gap-3.5 mb-4">
-          <div class="w-11 h-11 rounded-2xl bg-purple-600/30 text-purple-300 border border-purple-500/40 flex items-center justify-center text-xl font-bold">
-            <i data-lucide="bot" class="w-6 h-6"></i>
+          <div class="memora-panel-mark"><i data-lucide="book-heart" class="w-6 h-6"></i>
           </div>
           <div>
-            <h4 class="font-bold text-base text-white font-heading">Auto-Generated Vibe Summary</h4>
-            <p class="text-xs text-purple-300">Timeline & engagement insights</p>
+            <h4 class="font-serif-heading font-bold text-2xl text-heading">A note from the album</h4>
+            <p class="text-xs text-[var(--accent-leaf)]">Timeline & shared details</p>
           </div>
         </div>
 
-        <div class="p-4 rounded-2xl bg-slate-950/40 border border-purple-500/20 text-xs leading-relaxed text-slate-300 font-sans">
-          ${summaryMarkdown.replace(/\*\*(.*?)\*\*/g, '<strong class="text-purple-300 font-semibold">$1</strong>')}
+        <div class="memora-recap-copy">
+          ${summaryMarkdown.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
         </div>
       </div>
     `;

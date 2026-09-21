@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
-import type { Request, Response, NextFunction } from 'express';
+import jwt from "jsonwebtoken";
+import type { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'vibevault-super-secret-key-2026';
+const JWT_SECRET = process.env.JWT_SECRET || "vibevault-super-secret-key-2026";
 
 export interface AuthenticatedRequest extends Request {
   userId: string;
@@ -11,12 +11,19 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Global optional auth middleware (parses Bearer token if present)
  */
-export function parseAuthHeader(req: Request, _res: Response, next: NextFunction): void {
+export function parseAuthHeader(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username?: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        userId: string;
+        username?: string;
+      };
       (req as AuthenticatedRequest).userId = decoded.userId;
       (req as AuthenticatedRequest).username = decoded.username;
     } catch (_) {
@@ -29,31 +36,39 @@ export function parseAuthHeader(req: Request, _res: Response, next: NextFunction
 /**
  * Enforce valid JWT token on protected endpoints
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const authHeader = req.headers.authorization;
 
-  const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
-  const token = authHeader?.startsWith('Bearer ')
+  const queryToken =
+    typeof req.query.token === "string" ? req.query.token : null;
+  const token = authHeader?.startsWith("Bearer ")
     ? authHeader.substring(7)
     : queryToken;
 
   if (!token) {
     res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Authentication token required. Please sign in.',
+      error: "Unauthorized",
+      message: "Authentication token required. Please sign in.",
     });
     return;
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username?: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      userId: string;
+      username?: string;
+    };
     (req as AuthenticatedRequest).userId = decoded.userId;
     (req as AuthenticatedRequest).username = decoded.username;
     next();
   } catch (err) {
     res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Invalid or expired authentication token. Please sign in again.',
+      error: "Unauthorized",
+      message: "Invalid or expired authentication token. Please sign in again.",
     });
   }
 }
@@ -62,5 +77,5 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * Generate a JWT token for a user
  */
 export function generateUserToken(userId: string, username: string): string {
-  return jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: "30d" });
 }

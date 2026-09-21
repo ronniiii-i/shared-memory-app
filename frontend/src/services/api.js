@@ -21,7 +21,10 @@ function handleUnauthorized(endpoint) {
 async function parseError(res, endpoint) {
   if (res.status === 401) handleUnauthorized(endpoint);
   const err = await res.json().catch(() => ({ message: res.statusText }));
-  return new Error(err.error || err.message || `Request ${endpoint} failed (${res.status})`);
+  const error = new Error(err.error || err.message || `Request ${endpoint} failed (${res.status})`);
+  error.status = res.status;
+  error.page = err.page;
+  return error;
 }
 
 /**
@@ -92,6 +95,23 @@ export const api = {
   },
 
   /**
+   * PUT Request
+   */
+  async put(endpoint, data = {}) {
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw await parseError(res, endpoint);
+    }
+
+    return res.json();
+  },
+
+  /**
    * DELETE Request
    */
   async delete(endpoint) {
@@ -124,5 +144,11 @@ export const api = {
     }
 
     return true;
+  },
+
+  getImageProxyUrl(photoId) {
+    const token = localStorage.getItem('vibevault-token');
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    return `${API_BASE_URL}/photos/${photoId}/image${query}`;
   },
 };

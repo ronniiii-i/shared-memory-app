@@ -1,4 +1,4 @@
-import { Canvas, FabricImage, Rect, Textbox, Polygon, Path, PencilBrush, Group, filters } from 'fabric';
+import { Canvas, ActiveSelection, FabricImage, Rect, Textbox, Polygon, Path, PencilBrush, Group, filters } from 'fabric';
 import { UIComponent } from '../core/UIComponent.js';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
@@ -339,7 +339,9 @@ export class ScrapbookWorkspace extends UIComponent {
   getSelectedObjects() {
     const active = this.canvas?.getActiveObject();
     if (!active) return [];
-    return active.type === 'activeSelection' ? active.getObjects() : [active];
+    return typeof active.getObjects === 'function' && active.type !== 'group'
+      ? active.getObjects()
+      : [active];
   }
 
   discardSelection() {
@@ -349,10 +351,14 @@ export class ScrapbookWorkspace extends UIComponent {
 
   groupSelected() {
     const active = this.canvas?.getActiveObject();
-    if (!active || active.type !== 'activeSelection' || active.getObjects().length < 2 || this.activePage?.isLocked) return;
-    const group = active.toGroup();
+    const objects = this.getSelectedObjects();
+    if (!active || objects.length < 2 || this.activePage?.isLocked) return;
+    this.canvas.discardActiveObject();
+    this.canvas.remove(...objects);
+    const group = new Group(objects, { subTargetCheck: false });
     group.elementType = 'group';
-    group.subTargetCheck = false;
+    this.applySelectionStyle(group);
+    this.canvas.add(group);
     this.canvas.setActiveObject(group);
     this.updateSelectionControls();
     this.recordHistory();
@@ -361,7 +367,15 @@ export class ScrapbookWorkspace extends UIComponent {
   ungroupSelected() {
     const active = this.canvas?.getActiveObject();
     if (!active || active.type !== 'group' || this.activePage?.isLocked) return;
-    active.toActiveSelection();
+    const objects = active.getObjects();
+    this.canvas.discardActiveObject();
+    this.canvas.remove(active);
+    objects.forEach((object) => {
+      object.group = undefined;
+      this.canvas.add(object);
+    });
+    const selection = new ActiveSelection(objects, { canvas: this.canvas });
+    this.canvas.setActiveObject(selection);
     this.updateSelectionControls();
     this.recordHistory();
   }
@@ -385,8 +399,10 @@ export class ScrapbookWorkspace extends UIComponent {
   deleteSelected() {
     const objects = this.getSelectedObjects();
     if (!objects.length || this.activePage?.isLocked) return;
-    this.canvas.remove(...objects);
     this.discardSelection();
+    objects.forEach((object) => {
+      if (object.canvas === this.canvas) this.canvas.remove(object);
+    });
     this.recordHistory();
   }
 
@@ -595,6 +611,8 @@ export class ScrapbookWorkspace extends UIComponent {
       lockScalingX: object.locked,
       lockScalingY: object.locked,
       lockRotation: object.locked,
+      hasControls: !object.locked,
+      evented: true,
     });
   }
 
@@ -617,7 +635,29 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!stage) return;
     const availableWidth = Math.max(280, stage.clientWidth - 16);
     this.canvas.setZoom(Math.min(1, availableWidth / (this.activePage.canvasWidth || 1200)));
+    this.centerContent();
     this.canvas.requestRenderAll();
+  }
+
+  centerContent() {
+    if (!this.canvas) return;
+    const objects = this.canvas.getObjects();
+    if (!objects.length) return;
+    const bounds = this.canvas.getObjects().reduce((current, object) => {
+      const rect = object.getBoundingRect();
+      return {
+        left: Math.min(current.left, rect.left),
+        top: Math.min(current.top, rect.top),
+        right: Math.max(current.right, rect.left + rect.width),
+        bottom: Math.max(current.bottom, rect.top + rect.height),
+      };
+    }, { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+    const contentCenter = { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 };
+    const canvasCenter = { x: this.canvas.getWidth() / 2, y: this.canvas.getHeight() / 2 };
+    this.canvas.relativePan({
+      x: (canvasCenter.x - contentCenter.x) * this.canvas.getZoom(),
+      y: (canvasCenter.y - contentCenter.y) * this.canvas.getZoom(),
+    });
   }
 
   getSelectedObject() {
@@ -640,7 +680,7 @@ export class ScrapbookWorkspace extends UIComponent {
       this.refreshIcons();
     }
     if (groupButton) {
-      const canGroup = active?.type === 'activeSelection' && selected.length > 1;
+      const canGroup = active?.type !== 'group' && selected.length > 1;
       groupButton.disabled = !canGroup || this.activePage?.isLocked;
       groupButton.classList.toggle('is-active', active?.type === 'group');
     }
@@ -729,19 +769,20 @@ export class ScrapbookWorkspace extends UIComponent {
     const width = object.width || 300;
     const height = object.height || 220;
     object.clipStyle = 'torn';
-    object.clipPath = new Polygon([
-      { x: 0, y: 8 },
-      { x: width * 0.22, y: 0 },
-      { x: width * 0.5, y: 7 },
-      { x: width * 0.76, y: 0 },
-      { x: width, y: 8 },
-      { x: width, y: height },
-      { x: width * 0.72, y: height - 7 },
-      { x: width * 0.45, y: height },
-      { x: width * 0.2, y: height - 7 },
-      { x: 0, y: height },
-    ], { left: -width / 2, top: -height / 2, originX: 'left', originY: 'top' });
-    object.dirty = true;
+    const tornPath = new Polygon([
+      { x: -width / 2, y: -height / 2 + 8 },
+      { x: -width * 0.28, y: -height / 2 },
+      { x: 0, y: -height / 2 + 7 },
+      { x: width * 0.28, y: -height / 2 },
+      { x: width / 2, y: -height / 2 + 8 },
+      { x: width / 2, y: height / 2 },
+      { x: width * 0.25, y: height / 2 - 7 },
+      { x: 0, y: height / 2 },
+      { x: -width * 0.25, y: height / 2 - 7 },
+      { x: -width / 2, y: height / 2 },
+    ], { originX: 'center', originY: 'center' });
+    tornPath.absolutePositioned = false;
+    object.set({ clipPath: tornPath, objectCaching: true, dirty: true });
     object.setCoords();
   }
 
@@ -818,7 +859,7 @@ export class ScrapbookWorkspace extends UIComponent {
             <div class="scrapbook-tool-row">
               <div class="scrapbook-tool-group"><strong>Insert</strong><button class="btn-add-text tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="type"></i><span>Text</span></button><button class="btn-add-sticker tool-button" data-sticker="✨" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">✨</span><span>Sticker</span></button><button class="btn-add-sticker tool-button" data-sticker="❤️" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">❤️</span><span>Sticker</span></button></div>
               <div class="scrapbook-tool-group"><strong>Style</strong><button class="btn-apply-filter tool-button" data-filter="grayscale" ${this.activePage.isLocked ? 'disabled' : ''}>Mono</button><button class="btn-apply-filter tool-button" data-filter="sepia" ${this.activePage.isLocked ? 'disabled' : ''}>Sepia</button><button class="btn-apply-torn tool-button" ${this.activePage.isLocked ? 'disabled' : ''}>Torn edge</button></div>
-              <div class="scrapbook-tool-group"><strong>Arrange</strong><button class="btn-undo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Undo"><i data-lucide="undo-2"></i></button><button class="btn-redo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Redo"><i data-lucide="redo-2"></i></button><button class="btn-toggle-element-lock tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Lock or unlock selected elements"><i data-lucide="lock-keyhole"></i><span>Lock selected</span></button><button class="btn-group-elements tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="group"></i><span>Group</span></button><button class="btn-ungroup-elements tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="ungroup"></i><span>Ungroup</span></button><button class="btn-duplicate-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="copy"></i><span>Duplicate</span></button><button class="btn-move-layer tool-button" data-direction="up" ${this.activePage.isLocked ? 'disabled' : ''}>Bring forward</button><button class="btn-delete-element tool-button is-danger" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>Delete selected</span></button></div>
+              <div class="scrapbook-tool-group"><strong>Arrange</strong><button class="btn-undo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Undo"><i data-lucide="undo-2"></i></button><button class="btn-redo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Redo"><i data-lucide="redo-2"></i></button><button class="btn-toggle-element-lock tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Lock or unlock selected elements"><i data-lucide="lock-keyhole"></i><span>Lock selected</span></button><button class="btn-group-elements tool-button"><i data-lucide="group"></i><span>Group</span></button><button class="btn-ungroup-elements tool-button"><i data-lucide="ungroup"></i><span>Ungroup</span></button><button class="btn-duplicate-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="copy"></i><span>Duplicate</span></button><button class="btn-move-layer tool-button" data-direction="up" ${this.activePage.isLocked ? 'disabled' : ''}>Bring forward</button><button class="btn-move-layer tool-button" data-direction="down" ${this.activePage.isLocked ? 'disabled' : ''}>Send backward</button><button class="btn-delete-element tool-button is-danger" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>Delete selected</span></button></div>
               <div class="scrapbook-tool-group editor-mode-group"><strong>Mode</strong><button class="btn-editor-mode tool-button is-active" data-mode="select" ${this.activePage.isLocked ? 'disabled' : ''} title="Select and edit elements"><i data-lucide="mouse-pointer-2"></i><span>Select</span></button><button class="btn-editor-mode tool-button" data-mode="hand" ${this.activePage.isLocked ? 'disabled' : ''} title="Pan the canvas"><i data-lucide="hand"></i><span>Hand</span></button><button class="btn-editor-mode tool-button" data-mode="draw" ${this.activePage.isLocked ? 'disabled' : ''} title="Draw on the canvas"><i data-lucide="pen-line"></i><span>Draw</span></button></div>
               <div class="scrapbook-tool-group doodle-color-group"><strong>Doodle color</strong>${['#c85a32', '#2f6f8f', '#6b4f8a', '#3f9b69', '#d69b3d', '#24201d'].map((color) => `<button class="btn-doodle-color color-swatch ${this.doodleColor === color ? 'is-active' : ''}" data-color="${color}" style="--swatch-color: ${color}" aria-label="Choose doodle color ${color}" title="Choose doodle color"></button>`).join('')}</div>
               <div class="scrapbook-tool-group"><strong>Layouts</strong>${TEMPLATES.map((template) => `<button class="btn-apply-template tool-button" data-template="${template.id}" ${this.activePage.isLocked ? 'disabled' : ''}>${template.label}</button>`).join('')}</div>

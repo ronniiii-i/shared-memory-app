@@ -37,7 +37,7 @@ export function initPusher() {
  */
 export function subscribeToAlbum(albumId, callbacks = {}) {
   const client = initPusher();
-  if (!client) return () => {};
+  if (!client) return () => { };
 
   const channelName = `album-${albumId}`;
   let channel = activeSubscriptions.get(channelName);
@@ -87,7 +87,7 @@ export function subscribeToAlbum(albumId, callbacks = {}) {
  */
 export function subscribeToPhoto(photoId, callbacks = {}) {
   const client = initPusher();
-  if (!client) return () => {};
+  if (!client) return () => { };
 
   const channelName = `photo-${photoId}`;
   let channel = activeSubscriptions.get(channelName);

@@ -2,7 +2,12 @@ import { Router } from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { db } from "../db/index.js";
-import { albumMembers, photos, scrapbookElements, scrapbooks } from "../db/schema.js";
+import {
+  albumMembers,
+  photos,
+  scrapbookElements,
+  scrapbooks,
+} from "../db/schema.js";
 import { triggerAlbumEvent } from "../lib/pusher.js";
 
 const router = Router();
@@ -156,15 +161,22 @@ router.put("/:id/elements", requireAuth, async (req, res) => {
 
   const photoIds = req.body.elements
     .map((element: Record<string, unknown>) => element.photoId)
-    .filter((photoId: unknown): photoId is string => typeof photoId === "string");
+    .filter(
+      (photoId: unknown): photoId is string => typeof photoId === "string",
+    );
   if (photoIds.length > 0) {
     const albumPhotos = await db.query.photos.findMany({
-      where: and(inArray(photos.id, photoIds), eq(photos.albumId, page.albumId)),
+      where: and(
+        inArray(photos.id, photoIds),
+        eq(photos.albumId, page.albumId),
+      ),
       columns: { id: true },
     });
     const validPhotoIds = new Set(albumPhotos.map((photo) => photo.id));
     if (photoIds.some((photoId: string) => !validPhotoIds.has(photoId))) {
-      res.status(400).json({ error: "Every scrapbook photo must belong to this album" });
+      res
+        .status(400)
+        .json({ error: "Every scrapbook photo must belong to this album" });
       return;
     }
   }
@@ -218,11 +230,9 @@ router.patch("/:id/lock", requireAuth, async (req, res) => {
     return;
   }
   if (page.creatorId !== userId && membership.role !== "admin") {
-    res
-      .status(403)
-      .json({
-        error: "Only the page creator or an album admin can change the lock",
-      });
+    res.status(403).json({
+      error: "Only the page creator or an album admin can change the lock",
+    });
     return;
   }
 
@@ -253,12 +263,10 @@ router.delete("/:id", requireAuth, async (req, res) => {
     return;
   }
   if (page.creatorId !== userId && membership.role !== "admin") {
-    res
-      .status(403)
-      .json({
-        error:
-          "Only the page creator or an album admin can delete this scrapbook",
-      });
+    res.status(403).json({
+      error:
+        "Only the page creator or an album admin can delete this scrapbook",
+    });
     return;
   }
 

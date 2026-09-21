@@ -1,8 +1,9 @@
-import { Canvas, FabricImage, Rect, Textbox, Polygon, filters } from 'fabric';
+import { Canvas, FabricImage, Rect, Textbox, Polygon, Path, filters } from 'fabric';
 import { UIComponent } from '../core/UIComponent.js';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
 import { confirmDialog } from './ConfirmDialog.js';
+import { subscribeToAlbum } from '../services/pusher.js';
 
 const TEMPLATES = [
   { id: 'blank', label: 'Blank paper', background: 'paper' },
@@ -24,6 +25,13 @@ export class ScrapbookWorkspace extends UIComponent {
     this.saveTimer = null;
     this.isDrawing = false;
     this._fetched = false;
+    this.history = [];
+    this.historyIndex = -1;
+    this.isApplyingHistory = false;
+    this.unsubscribePusher = null;
+    this.hasUnsavedChanges = false;
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
   }
 
   async onMount() {
@@ -43,6 +51,41 @@ export class ScrapbookWorkspace extends UIComponent {
     this.delegate('click', '.btn-duplicate-element', () => this.duplicateSelected());
     this.delegate('click', '.btn-delete-element', () => this.deleteSelected());
     this.delegate('click', '.btn-move-layer', (event, target) => this.moveLayer(target.dataset.direction));
+    this.delegate('click', '.btn-undo-element', () => this.undo());
+    this.delegate('click', '.btn-redo-element', () => this.redo());
+    this.delegate('click', '.btn-toggle-element-lock', () => this.toggleElementLock());
+    this.on(document, 'keydown', this.handleKeyDown);
+    this.on(window, 'beforeunload', this.handleBeforeUnload);
+
+    if (!this.unsubscribePusher) {
+      this.unsubscribePusher = subscribeToAlbum(this.albumId, {
+        onScrapbookCreated: (data) => {
+          if (data.scrapbook && !this.pages.some((page) => page.id === data.scrapbook.id)) {
+            this.pages = [...this.pages, { ...data.scrapbook, elements: [] }];
+            this.update();
+          }
+        },
+        onScrapbookUpdated: (data) => this.handleRemoteRevision(data),
+        onScrapbookDeleted: (data) => {
+          this.pages = this.pages.filter((page) => page.id !== data.scrapbookId);
+          if (this.activePage?.id === data.scrapbookId) {
+            this.activePage = this.pages[0] || null;
+            this.update();
+            if (this.activePage) this.selectPage(this.activePage.id);
+          } else {
+            this.update();
+          }
+        },
+        onScrapbookLockChanged: (data) => {
+          this.pages = this.pages.map((page) => page.id === data.scrapbookId ? { ...page, isLocked: data.isLocked } : page);
+          if (this.activePage?.id === data.scrapbookId) {
+            this.activePage = { ...this.activePage, isLocked: data.isLocked };
+            this.update();
+            this.mountCanvas();
+          }
+        },
+      });
+    }
 
     if (!this._fetched) {
       this._fetched = true;
@@ -54,6 +97,31 @@ export class ScrapbookWorkspace extends UIComponent {
     this._fetched = false;
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
     this.canvas?.dispose();
+    this.unsubscribePusher?.();
+    this.unsubscribePusher = null;
+  }
+
+  handleBeforeUnload(event) {
+    if (!this.hasUnsavedChanges) return;
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  handleKeyDown(event) {
+    if (!this.canvas || this.activePage?.isLocked) return;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) return;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      event.shiftKey ? this.redo() : this.undo();
+    } else if (modifier && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      this.redo();
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      this.deleteSelected();
+    }
   }
 
   async loadPages() {
@@ -114,12 +182,23 @@ export class ScrapbookWorkspace extends UIComponent {
       preserveObjectStacking: true,
     });
     this.canvas.wrapperEl.classList.add('scrapbook-fabric-wrapper');
-    this.canvas.on('object:modified', () => this.scheduleSave());
-    this.canvas.on('object:added', () => this.scheduleSave());
+    this.canvas.on('object:modified', () => this.recordHistory());
+    this.canvas.on('object:added', () => this.recordHistory());
+    this.canvas.on('object:removed', () => this.recordHistory());
+    this.canvas.on('path:created', ({ path }) => {
+      path.elementType = 'doodle';
+      this.recordHistory();
+    });
 
+    this.isApplyingHistory = true;
     for (const element of this.activePage.elements || []) {
       await this.restoreElement(element);
     }
+    this.isApplyingHistory = false;
+    this.history = [];
+    this.historyIndex = -1;
+    this.hasUnsavedChanges = false;
+    this.recordHistory();
     this.canvas.requestRenderAll();
     this.fitCanvas();
   }
@@ -129,6 +208,7 @@ export class ScrapbookWorkspace extends UIComponent {
     if (element.type === 'photo' && properties.src) {
       const image = await FabricImage.fromURL(properties.src, { crossOrigin: 'anonymous' });
       image.set({ ...properties, photoId: element.photoId, elementType: 'photo', locked: element.locked });
+      this.applyObjectLock(image, element.locked);
       if (properties.filterStyle) this.applyFilterToObject(image, properties.filterStyle);
       if (properties.clipStyle === 'torn') this.applyTornToObject(image);
       this.canvas.add(image);
@@ -136,17 +216,26 @@ export class ScrapbookWorkspace extends UIComponent {
     }
     if (element.type === 'text') {
       const text = new Textbox(properties.text || 'Your memory', { ...properties, elementType: 'text', locked: element.locked });
+      this.applyObjectLock(text, element.locked);
       this.canvas.add(text);
       return;
     }
     if (element.type === 'sticker') {
       const sticker = new Textbox(properties.text || '✨', { ...properties, fontSize: 54, elementType: 'sticker', locked: element.locked });
+      this.applyObjectLock(sticker, element.locked);
       this.canvas.add(sticker);
       return;
     }
     if (element.type === 'shape') {
       const shape = new Rect({ fill: '#e7b66b', rx: 14, ry: 14, ...properties, elementType: 'shape', locked: element.locked });
+      this.applyObjectLock(shape, element.locked);
       this.canvas.add(shape);
+      return;
+    }
+    if (element.type === 'doodle' && properties.path) {
+      const doodle = new Path(properties.path, { ...properties, elementType: 'doodle', locked: element.locked });
+      this.applyObjectLock(doodle, element.locked);
+      this.canvas.add(doodle);
     }
   }
 
@@ -154,6 +243,54 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!this.activePage || this.activePage.isLocked) return;
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => this.saveCanvas(), 700);
+  }
+
+  serializeCanvas() {
+    if (!this.canvas) return '';
+    return JSON.stringify(this.canvas.toJSON([
+      'photoId', 'elementType', 'src', 'locked', 'filterStyle', 'clipStyle',
+    ]));
+  }
+
+  recordHistory() {
+    if (!this.canvas || this.isApplyingHistory || this.activePage?.isLocked) return;
+    const snapshot = this.serializeCanvas();
+    if (snapshot === this.history[this.historyIndex]) return;
+    this.history = this.history.slice(0, this.historyIndex + 1);
+    this.history.push(snapshot);
+    this.historyIndex = this.history.length - 1;
+    this.hasUnsavedChanges = this.historyIndex > 0;
+    this.updateHistoryButtons();
+    this.scheduleSave();
+  }
+
+  async restoreSnapshot(snapshot) {
+    if (!this.canvas || !snapshot) return;
+    this.isApplyingHistory = true;
+    await this.canvas.loadFromJSON(JSON.parse(snapshot));
+    this.isApplyingHistory = false;
+    this.canvas.requestRenderAll();
+    this.updateHistoryButtons();
+    this.scheduleSave();
+  }
+
+  async undo() {
+    if (this.historyIndex <= 0 || this.activePage?.isLocked) return;
+    this.historyIndex -= 1;
+    await this.restoreSnapshot(this.history[this.historyIndex]);
+  }
+
+  async redo() {
+    if (this.historyIndex >= this.history.length - 1 || this.activePage?.isLocked) return;
+    this.historyIndex += 1;
+    await this.restoreSnapshot(this.history[this.historyIndex]);
+  }
+
+  updateHistoryButtons() {
+    const undo = this.$('.btn-undo-element');
+    const redo = this.$('.btn-redo-element');
+    if (undo) undo.disabled = this.historyIndex <= 0 || this.activePage?.isLocked;
+    if (redo) redo.disabled = this.historyIndex >= this.history.length - 1 || this.activePage?.isLocked;
   }
 
   async saveCanvas() {
@@ -167,6 +304,7 @@ export class ScrapbookWorkspace extends UIComponent {
       const properties = object.toObject([
         'left', 'top', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'fill',
         'fontSize', 'fontFamily', 'text', 'src', 'opacity', 'flipX', 'flipY',
+        'path', 'stroke', 'strokeWidth', 'fill',
         'filterStyle', 'clipStyle',
       ]);
       return {
@@ -186,11 +324,26 @@ export class ScrapbookWorkspace extends UIComponent {
       this.activePage = saved;
       this.pages = this.pages.map((page) => page.id === saved.id ? saved : page);
       this.isSaving = false;
+      this.hasUnsavedChanges = false;
       this.updateSaveStatus('Saved');
     } catch (err) {
       this.isSaving = false;
       this.updateSaveStatus('Save failed');
       toast.error(`Could not save scrapbook: ${err.message}`);
+    }
+  }
+
+  async handleRemoteRevision(data) {
+    if (!data?.scrapbookId || data.scrapbookId !== this.activePage?.id || this.isSaving) return;
+    if (typeof data.revision !== 'number' || data.revision <= this.activePage.revision) return;
+    try {
+      this.activePage = await api.get(`/scrapbooks/${data.scrapbookId}`);
+      this.pages = this.pages.map((page) => page.id === this.activePage.id ? this.activePage : page);
+      this.update();
+      await this.mountCanvas();
+      toast.info('This scrapbook was updated by another member.');
+    } catch (err) {
+      toast.error(`Could not refresh the shared scrapbook: ${err.message}`);
     }
   }
 
@@ -285,6 +438,25 @@ export class ScrapbookWorkspace extends UIComponent {
     const text = new Textbox(sticker, { left: 260, top: 220, fontSize: 64, elementType: 'sticker', width: 100 });
     this.canvas.add(text);
     this.canvas.setActiveObject(text);
+    this.scheduleSave();
+  }
+
+  applyObjectLock(object, locked) {
+    object.locked = locked === true;
+    object.set({
+      lockMovementX: object.locked,
+      lockMovementY: object.locked,
+      lockScalingX: object.locked,
+      lockScalingY: object.locked,
+      lockRotation: object.locked,
+    });
+  }
+
+  toggleElementLock() {
+    const object = this.getSelectedObject();
+    if (!object || this.activePage?.isLocked) return;
+    this.applyObjectLock(object, !object.locked);
+    this.canvas.requestRenderAll();
     this.scheduleSave();
   }
 
@@ -417,7 +589,7 @@ export class ScrapbookWorkspace extends UIComponent {
             <div class="scrapbook-tool-row">
               <div class="scrapbook-tool-group"><strong>Insert</strong><button class="btn-add-text tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="type"></i><span>Text</span></button><button class="btn-add-sticker tool-button" data-sticker="✨" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">✨</span><span>Sticker</span></button><button class="btn-add-sticker tool-button" data-sticker="❤️" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">❤️</span><span>Sticker</span></button></div>
               <div class="scrapbook-tool-group"><strong>Style</strong><button class="btn-apply-filter tool-button" data-filter="grayscale" ${this.activePage.isLocked ? 'disabled' : ''}>Mono</button><button class="btn-apply-filter tool-button" data-filter="sepia" ${this.activePage.isLocked ? 'disabled' : ''}>Sepia</button><button class="btn-apply-torn tool-button" ${this.activePage.isLocked ? 'disabled' : ''}>Torn edge</button></div>
-              <div class="scrapbook-tool-group"><strong>Arrange</strong><button class="btn-duplicate-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="copy"></i><span>Duplicate</span></button><button class="btn-move-layer tool-button" data-direction="up" ${this.activePage.isLocked ? 'disabled' : ''}>Bring forward</button><button class="btn-delete-element tool-button is-danger" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>Delete</span></button></div>
+              <div class="scrapbook-tool-group"><strong>Arrange</strong><button class="btn-undo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Undo"><i data-lucide="undo-2"></i></button><button class="btn-redo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Redo"><i data-lucide="redo-2"></i></button><button class="btn-toggle-element-lock tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Lock or unlock selected element"><i data-lucide="lock-keyhole"></i><span>Lock element</span></button><button class="btn-duplicate-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="copy"></i><span>Duplicate</span></button><button class="btn-move-layer tool-button" data-direction="up" ${this.activePage.isLocked ? 'disabled' : ''}>Bring forward</button><button class="btn-delete-element tool-button is-danger" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>Delete</span></button></div>
               <div class="scrapbook-tool-group"><button class="btn-toggle-drawing tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="pen-line"></i><span>Doodle</span></button></div>
               <div class="scrapbook-tool-group"><strong>Layouts</strong>${TEMPLATES.map((template) => `<button class="btn-apply-template tool-button" data-template="${template.id}" ${this.activePage.isLocked ? 'disabled' : ''}>${template.label}</button>`).join('')}</div>
               <span class="scrapbook-revision">Revision ${this.activePage.revision}</span>

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { db } from "../db/index.js";
-import { albumMembers, scrapbookElements, scrapbooks } from "../db/schema.js";
+import { albumMembers, photos, scrapbookElements, scrapbooks } from "../db/schema.js";
 import { triggerAlbumEvent } from "../lib/pusher.js";
 
 const router = Router();
@@ -152,6 +152,21 @@ router.put("/:id/elements", requireAuth, async (req, res) => {
   if (!Array.isArray(req.body.elements)) {
     res.status(400).json({ error: "elements array is required" });
     return;
+  }
+
+  const photoIds = req.body.elements
+    .map((element: Record<string, unknown>) => element.photoId)
+    .filter((photoId: unknown): photoId is string => typeof photoId === "string");
+  if (photoIds.length > 0) {
+    const albumPhotos = await db.query.photos.findMany({
+      where: and(inArray(photos.id, photoIds), eq(photos.albumId, page.albumId)),
+      columns: { id: true },
+    });
+    const validPhotoIds = new Set(albumPhotos.map((photo) => photo.id));
+    if (photoIds.some((photoId: string) => !validPhotoIds.has(photoId))) {
+      res.status(400).json({ error: "Every scrapbook photo must belong to this album" });
+      return;
+    }
   }
 
   await db

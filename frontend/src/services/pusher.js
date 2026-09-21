@@ -56,12 +56,28 @@ export function subscribeToAlbum(albumId, callbacks = {}) {
   if (callbacks.onPhotoRemoved) {
     channel.bind('photo:removed', callbacks.onPhotoRemoved);
   }
+  if (callbacks.onScrapbookCreated) {
+    channel.bind('scrapbook:created', callbacks.onScrapbookCreated);
+  }
+  if (callbacks.onScrapbookUpdated) {
+    channel.bind('scrapbook:updated', callbacks.onScrapbookUpdated);
+  }
+  if (callbacks.onScrapbookDeleted) {
+    channel.bind('scrapbook:deleted', callbacks.onScrapbookDeleted);
+  }
+  if (callbacks.onScrapbookLockChanged) {
+    channel.bind('scrapbook:lock-changed', callbacks.onScrapbookLockChanged);
+  }
 
   return () => {
     if (channel) {
       if (callbacks.onPhotoAdded) channel.unbind('photo:added', callbacks.onPhotoAdded);
       if (callbacks.onPhotoMoved) channel.unbind('photo:moved', callbacks.onPhotoMoved);
       if (callbacks.onPhotoRemoved) channel.unbind('photo:removed', callbacks.onPhotoRemoved);
+      if (callbacks.onScrapbookCreated) channel.unbind('scrapbook:created', callbacks.onScrapbookCreated);
+      if (callbacks.onScrapbookUpdated) channel.unbind('scrapbook:updated', callbacks.onScrapbookUpdated);
+      if (callbacks.onScrapbookDeleted) channel.unbind('scrapbook:deleted', callbacks.onScrapbookDeleted);
+      if (callbacks.onScrapbookLockChanged) channel.unbind('scrapbook:lock-changed', callbacks.onScrapbookLockChanged);
     }
   };
 }

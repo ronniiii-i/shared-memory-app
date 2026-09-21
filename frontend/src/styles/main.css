@@ -736,7 +736,7 @@
   margin-left: auto;
 }
 .scrapbook-canvas-stage {
-  overflow: auto;
+  overflow: hidden;
   padding: 1rem;
   background-color: #f4ead9;
   background-image: radial-gradient(
@@ -747,6 +747,15 @@
   border: 1px solid var(--border-color);
   border-radius: 0.8rem;
 }
+.scrapbook-canvas-stage.editor-mode-select .scrapbook-fabric-wrapper { cursor: default; }
+.scrapbook-canvas-stage.editor-mode-hand .scrapbook-fabric-wrapper,
+.scrapbook-canvas-stage.editor-mode-hand .upper-canvas { cursor: grab !important; }
+.scrapbook-canvas-stage.editor-mode-hand .scrapbook-fabric-wrapper:active,
+.scrapbook-canvas-stage.editor-mode-hand .upper-canvas:active { cursor: grabbing !important; }
+.scrapbook-canvas-stage.editor-mode-draw .scrapbook-fabric-wrapper,
+.scrapbook-canvas-stage.editor-mode-draw .upper-canvas { cursor: crosshair !important; }
+.scrapbook-fabric-wrapper .upper-canvas,
+.scrapbook-fabric-wrapper .lower-canvas { outline: none; }
 .scrapbook-canvas-stage.film {
   background-color: #20242a;
   background-image: linear-gradient(

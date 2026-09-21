@@ -679,6 +679,33 @@
   border-color: var(--accent-sienna);
   color: var(--accent-sienna);
 }
+.tool-button.is-active {
+  color: white;
+  background: var(--accent-sienna);
+  border-color: var(--accent-sienna);
+}
+.color-swatch {
+  width: 1.55rem;
+  min-height: 1.55rem;
+  padding: 0;
+  background: var(--swatch-color);
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+.color-swatch.is-active {
+  box-shadow:
+    0 0 0 2px var(--accent-sienna),
+    0 0 0 4px var(--bg-surface);
+}
+.scrapbook-canvas-stage .canvas-container,
+.scrapbook-canvas-stage canvas {
+  touch-action: none;
+}
+.editor-mode-group,
+.doodle-color-group {
+  flex: 0 0 auto;
+}
 .tool-button.is-danger {
   color: #d85858;
 }

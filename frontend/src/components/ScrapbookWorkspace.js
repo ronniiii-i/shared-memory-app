@@ -1,4 +1,4 @@
-import { Canvas, FabricImage, Rect, Textbox, Polygon, Path, filters } from 'fabric';
+import { Canvas, FabricImage, Rect, Textbox, Polygon, Path, PencilBrush, filters } from 'fabric';
 import { UIComponent } from '../core/UIComponent.js';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
@@ -30,6 +30,12 @@ export class ScrapbookWorkspace extends UIComponent {
     this.isApplyingHistory = false;
     this.unsubscribePusher = null;
     this.hasUnsavedChanges = false;
+    this.saveQueued = false;
+    this.conflictRetries = 0;
+    this.editorMode = 'select';
+    this.doodleColor = '#c85a32';
+    this.isPanning = false;
+    this.panOrigin = null;
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
   }
@@ -46,6 +52,8 @@ export class ScrapbookWorkspace extends UIComponent {
     this.delegate('click', '.btn-add-sticker', (event, target) => this.addSticker(target.dataset.sticker));
     this.delegate('click', '.btn-apply-template', (event, target) => this.applyTemplate(target.dataset.template));
     this.delegate('click', '.btn-toggle-drawing', () => this.toggleDrawing());
+    this.delegate('click', '.btn-editor-mode', (event, target) => this.setEditorMode(target.dataset.mode));
+    this.delegate('click', '.btn-doodle-color', (event, target) => this.setDoodleColor(target.dataset.color));
     this.delegate('click', '.btn-apply-filter', (event, target) => this.applyFilter(target.dataset.filter));
     this.delegate('click', '.btn-apply-torn', () => this.applyTornEdge());
     this.delegate('click', '.btn-duplicate-element', () => this.duplicateSelected());
@@ -187,8 +195,12 @@ export class ScrapbookWorkspace extends UIComponent {
     this.canvas.on('object:removed', () => this.recordHistory());
     this.canvas.on('path:created', ({ path }) => {
       path.elementType = 'doodle';
+      path.doodleColor = this.doodleColor;
       this.recordHistory();
     });
+    this.canvas.on('mouse:down', (event) => this.handleCanvasMouseDown(event));
+    this.canvas.on('mouse:move', (event) => this.handleCanvasMouseMove(event));
+    this.canvas.on('mouse:up', () => this.handleCanvasMouseUp());
 
     this.isApplyingHistory = true;
     for (const element of this.activePage.elements || []) {
@@ -204,9 +216,10 @@ export class ScrapbookWorkspace extends UIComponent {
   }
 
   async restoreElement(element) {
-    const properties = element.properties || {};
+    const properties = this.safeFabricProperties(element.properties || {});
     if (element.type === 'photo' && properties.src) {
-      const image = await FabricImage.fromURL(properties.src, { crossOrigin: 'anonymous' });
+      const matchingPhoto = this.photos.find((photo) => photo.id === element.photoId || photo.r2Url === properties.src);
+      const image = await this.loadPhotoImage(matchingPhoto?.id || element.photoId, properties.src);
       image.set({ ...properties, photoId: element.photoId, elementType: 'photo', locked: element.locked });
       this.applyObjectLock(image, element.locked);
       if (properties.filterStyle) this.applyFilterToObject(image, properties.filterStyle);
@@ -234,6 +247,7 @@ export class ScrapbookWorkspace extends UIComponent {
     }
     if (element.type === 'doodle' && properties.path) {
       const doodle = new Path(properties.path, { ...properties, elementType: 'doodle', locked: element.locked });
+      doodle.doodleColor = properties.doodleColor || properties.stroke || this.doodleColor;
       this.applyObjectLock(doodle, element.locked);
       this.canvas.add(doodle);
     }
@@ -246,10 +260,48 @@ export class ScrapbookWorkspace extends UIComponent {
   }
 
   serializeCanvas() {
-    if (!this.canvas) return '';
-    return JSON.stringify(this.canvas.toJSON([
-      'photoId', 'elementType', 'src', 'locked', 'filterStyle', 'clipStyle',
-    ]));
+    return JSON.stringify(this.getCanvasElements());
+  }
+
+  safeFabricProperties(properties) {
+    const {
+      type, version, elementType, photoId, clipPath, filters: serializedFilters,
+      ...safeProperties
+    } = properties;
+    return safeProperties;
+  }
+
+  getCanvasElements() {
+    if (!this.canvas) return [];
+    return this.canvas.getObjects().map((object, index) => ({
+      type: object.elementType || (object.path ? 'doodle' : 'shape'),
+      photoId: object.photoId || null,
+      zIndex: index,
+      locked: object.locked === true,
+      properties: {
+        left: object.left,
+        top: object.top,
+        scaleX: object.scaleX,
+        scaleY: object.scaleY,
+        angle: object.angle,
+        width: object.width,
+        height: object.height,
+        fill: object.fill,
+        fontSize: object.fontSize,
+        fontFamily: object.fontFamily,
+        text: object.text,
+        src: object.src,
+        opacity: object.opacity,
+        flipX: object.flipX,
+        flipY: object.flipY,
+        path: object.path,
+        stroke: object.stroke,
+        strokeWidth: object.strokeWidth,
+        filterStyle: object.filterStyle,
+        clipStyle: object.clipStyle,
+        doodleColor: object.doodleColor,
+      },
+    }));
   }
 
   recordHistory() {
@@ -267,7 +319,10 @@ export class ScrapbookWorkspace extends UIComponent {
   async restoreSnapshot(snapshot) {
     if (!this.canvas || !snapshot) return;
     this.isApplyingHistory = true;
-    await this.canvas.loadFromJSON(JSON.parse(snapshot));
+    this.canvas.clear();
+    for (const element of JSON.parse(snapshot)) {
+      await this.restoreElement(element);
+    }
     this.isApplyingHistory = false;
     this.canvas.requestRenderAll();
     this.updateHistoryButtons();
@@ -295,26 +350,14 @@ export class ScrapbookWorkspace extends UIComponent {
 
   async saveCanvas() {
     if (!this.canvas || !this.activePage || this.activePage.isLocked) return;
+    if (this.isSaving) {
+      this.saveQueued = true;
+      return;
+    }
     this.isSaving = true;
     this.updateSaveStatus();
 
-    const objects = this.canvas.getObjects();
-    const elements = objects.map((object, index) => {
-      const type = object.elementType || 'shape';
-      const properties = object.toObject([
-        'left', 'top', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'fill',
-        'fontSize', 'fontFamily', 'text', 'src', 'opacity', 'flipX', 'flipY',
-        'path', 'stroke', 'strokeWidth', 'fill',
-        'filterStyle', 'clipStyle',
-      ]);
-      return {
-        type,
-        photoId: object.photoId || null,
-        zIndex: index,
-        locked: object.locked === true,
-        properties,
-      };
-    });
+    const elements = this.getCanvasElements();
 
     try {
       const saved = await api.put(`/scrapbooks/${this.activePage.id}/elements`, {
@@ -325,10 +368,23 @@ export class ScrapbookWorkspace extends UIComponent {
       this.pages = this.pages.map((page) => page.id === saved.id ? saved : page);
       this.isSaving = false;
       this.hasUnsavedChanges = false;
+      this.conflictRetries = 0;
       this.updateSaveStatus('Saved');
+      if (this.saveQueued) {
+        this.saveQueued = false;
+        this.scheduleSave();
+      }
     } catch (err) {
       this.isSaving = false;
       this.updateSaveStatus('Save failed');
+      if (err.status === 409 && err.page?.revision !== undefined && this.conflictRetries < 1) {
+        this.conflictRetries += 1;
+        this.activePage = { ...this.activePage, revision: err.page.revision };
+        this.pages = this.pages.map((page) => page.id === this.activePage.id ? { ...page, revision: err.page.revision } : page);
+        this.saveQueued = false;
+        this.scheduleSave();
+        return;
+      }
       toast.error(`Could not save scrapbook: ${err.message}`);
     }
   }
@@ -405,19 +461,23 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!this.canvas || !this.activePage || this.activePage.isLocked) return;
     const selected = this.photos.filter((photo) => this.selectedPhotoIds.has(photo.id));
     for (const photo of selected) {
-      const image = await FabricImage.fromURL(photo.r2Url, { crossOrigin: 'anonymous' });
-      image.set({
-        left: 80 + (this.canvas.getObjects().length % 4) * 250,
-        top: 80 + (this.canvas.getObjects().length % 3) * 190,
-        scaleX: 0.35,
-        scaleY: 0.35,
-        angle: (this.canvas.getObjects().length % 3 - 1) * 4,
-        photoId: photo.id,
-        elementType: 'photo',
-        src: photo.r2Url,
-        cornerStyle: 'round',
-      });
-      this.canvas.add(image);
+      try {
+        const image = await this.loadPhotoImage(photo.id, photo.r2Url);
+        image.set({
+          left: 80 + (this.canvas.getObjects().length % 4) * 250,
+          top: 80 + (this.canvas.getObjects().length % 3) * 190,
+          scaleX: 0.35,
+          scaleY: 0.35,
+          angle: (this.canvas.getObjects().length % 3 - 1) * 4,
+          photoId: photo.id,
+          elementType: 'photo',
+          src: photo.r2Url,
+          cornerStyle: 'round',
+        });
+        this.canvas.add(image);
+      } catch (err) {
+        toast.error(`Could not add photo: ${err.message}`);
+      }
     }
     this.canvas.requestRenderAll();
     this.selectedPhotoIds.clear();
@@ -430,7 +490,7 @@ export class ScrapbookWorkspace extends UIComponent {
     const text = new Textbox('Write a memory', { left: 200, top: 160, fontSize: 34, fill: '#2f241e', elementType: 'text', width: 300 });
     this.canvas.add(text);
     this.canvas.setActiveObject(text);
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   addSticker(sticker) {
@@ -438,7 +498,7 @@ export class ScrapbookWorkspace extends UIComponent {
     const text = new Textbox(sticker, { left: 260, top: 220, fontSize: 64, elementType: 'sticker', width: 100 });
     this.canvas.add(text);
     this.canvas.setActiveObject(text);
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   applyObjectLock(object, locked) {
@@ -457,7 +517,7 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!object || this.activePage?.isLocked) return;
     this.applyObjectLock(object, !object.locked);
     this.canvas.requestRenderAll();
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   fitCanvas() {
@@ -475,12 +535,56 @@ export class ScrapbookWorkspace extends UIComponent {
 
   toggleDrawing() {
     if (!this.canvas || this.activePage?.isLocked) return;
-    this.isDrawing = !this.isDrawing;
+    this.setEditorMode(this.editorMode === 'draw' ? 'select' : 'draw');
+  }
+
+  setEditorMode(mode) {
+    if (!this.canvas || this.activePage?.isLocked) return;
+    this.editorMode = mode;
+    this.isDrawing = mode === 'draw';
     this.canvas.isDrawingMode = this.isDrawing;
+    this.canvas.selection = mode === 'select';
+    this.canvas.skipTargetFind = mode === 'hand' || mode === 'draw';
+    this.canvas.setCursor(mode === 'hand' ? 'grab' : mode === 'draw' ? 'crosshair' : 'default');
+    if (!this.canvas.freeDrawingBrush) {
+      this.canvas.freeDrawingBrush = new PencilBrush(this.canvas);
+    }
     this.canvas.freeDrawingBrush.width = 5;
-    this.canvas.freeDrawingBrush.color = '#c85a32';
-    const button = this.$('.btn-toggle-drawing');
-    if (button) button.classList.toggle('is-active', this.isDrawing);
+    this.canvas.freeDrawingBrush.color = this.doodleColor;
+    this.element?.querySelectorAll('.btn-editor-mode').forEach((button) => {
+      button.classList.toggle('is-active', button.dataset.mode === mode);
+    });
+  }
+
+  setDoodleColor(color) {
+    this.doodleColor = color;
+    if (this.canvas?.freeDrawingBrush) this.canvas.freeDrawingBrush.color = color;
+    this.element?.querySelectorAll('.btn-doodle-color').forEach((button) => {
+      button.classList.toggle('is-active', button.dataset.color === color);
+    });
+    if (this.editorMode !== 'draw') this.setEditorMode('draw');
+  }
+
+  handleCanvasMouseDown(event) {
+    if (this.editorMode !== 'hand') return;
+    this.isPanning = true;
+    this.panOrigin = { x: event.e.clientX, y: event.e.clientY };
+    this.canvas.setCursor('grabbing');
+  }
+
+  handleCanvasMouseMove(event) {
+    if (!this.isPanning || this.editorMode !== 'hand') return;
+    const point = event.e;
+    const deltaX = point.clientX - this.panOrigin.x;
+    const deltaY = point.clientY - this.panOrigin.y;
+    this.canvas.relativePan({ x: deltaX, y: deltaY });
+    this.panOrigin = { x: point.clientX, y: point.clientY };
+  }
+
+  handleCanvasMouseUp() {
+    this.isPanning = false;
+    this.panOrigin = null;
+    if (this.canvas) this.canvas.setCursor(this.editorMode === 'hand' ? 'grab' : 'default');
   }
 
   applyFilterToObject(object, filterStyle) {
@@ -496,7 +600,7 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!object || object.elementType !== 'photo' || this.activePage?.isLocked) return;
     this.applyFilterToObject(object, filterStyle);
     this.canvas.requestRenderAll();
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   applyTornToObject(object) {
@@ -520,7 +624,7 @@ export class ScrapbookWorkspace extends UIComponent {
     if (!object || object.elementType !== 'photo' || this.activePage?.isLocked) return;
     this.applyTornToObject(object);
     this.canvas.requestRenderAll();
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   async duplicateSelected() {
@@ -530,7 +634,7 @@ export class ScrapbookWorkspace extends UIComponent {
     copy.set({ left: (object.left || 0) + 24, top: (object.top || 0) + 24 });
     this.canvas.add(copy);
     this.canvas.setActiveObject(copy);
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   deleteSelected() {
@@ -539,7 +643,7 @@ export class ScrapbookWorkspace extends UIComponent {
     this.canvas.remove(object);
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   moveLayer(direction) {
@@ -548,7 +652,7 @@ export class ScrapbookWorkspace extends UIComponent {
     if (direction === 'up') this.canvas.bringObjectForward(object);
     else this.canvas.sendObjectBackwards(object);
     this.canvas.requestRenderAll();
-    this.scheduleSave();
+    this.recordHistory();
   }
 
   applyTemplate(templateId) {
@@ -559,11 +663,19 @@ export class ScrapbookWorkspace extends UIComponent {
       .then((updated) => {
         this.activePage = { ...this.activePage, ...updated };
         this.pages = this.pages.map((page) => page.id === updated.id ? this.activePage : page);
-        this.update();
-        this.mountCanvas();
+        const stage = this.$('.scrapbook-canvas-stage');
+        if (stage) {
+          stage.classList.remove(...TEMPLATES.map((item) => item.background));
+          stage.classList.add(template.background);
+        }
         toast.success(`${template.label} applied.`);
       })
       .catch((err) => toast.error(`Could not apply template: ${err.message}`));
+  }
+
+  async loadPhotoImage(photoId, fallbackUrl) {
+    const source = photoId ? api.getImageProxyUrl(photoId) : fallbackUrl;
+    return FabricImage.fromURL(source, { crossOrigin: 'anonymous' });
   }
 
   render() {
@@ -590,7 +702,8 @@ export class ScrapbookWorkspace extends UIComponent {
               <div class="scrapbook-tool-group"><strong>Insert</strong><button class="btn-add-text tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="type"></i><span>Text</span></button><button class="btn-add-sticker tool-button" data-sticker="✨" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">✨</span><span>Sticker</span></button><button class="btn-add-sticker tool-button" data-sticker="❤️" ${this.activePage.isLocked ? 'disabled' : ''}><span aria-hidden="true">❤️</span><span>Sticker</span></button></div>
               <div class="scrapbook-tool-group"><strong>Style</strong><button class="btn-apply-filter tool-button" data-filter="grayscale" ${this.activePage.isLocked ? 'disabled' : ''}>Mono</button><button class="btn-apply-filter tool-button" data-filter="sepia" ${this.activePage.isLocked ? 'disabled' : ''}>Sepia</button><button class="btn-apply-torn tool-button" ${this.activePage.isLocked ? 'disabled' : ''}>Torn edge</button></div>
               <div class="scrapbook-tool-group"><strong>Arrange</strong><button class="btn-undo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Undo"><i data-lucide="undo-2"></i></button><button class="btn-redo-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Redo"><i data-lucide="redo-2"></i></button><button class="btn-toggle-element-lock tool-button" ${this.activePage.isLocked ? 'disabled' : ''} title="Lock or unlock selected element"><i data-lucide="lock-keyhole"></i><span>Lock element</span></button><button class="btn-duplicate-element tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="copy"></i><span>Duplicate</span></button><button class="btn-move-layer tool-button" data-direction="up" ${this.activePage.isLocked ? 'disabled' : ''}>Bring forward</button><button class="btn-delete-element tool-button is-danger" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="trash-2"></i><span>Delete</span></button></div>
-              <div class="scrapbook-tool-group"><button class="btn-toggle-drawing tool-button" ${this.activePage.isLocked ? 'disabled' : ''}><i data-lucide="pen-line"></i><span>Doodle</span></button></div>
+              <div class="scrapbook-tool-group editor-mode-group"><strong>Mode</strong><button class="btn-editor-mode tool-button is-active" data-mode="select" ${this.activePage.isLocked ? 'disabled' : ''} title="Select and edit elements"><i data-lucide="mouse-pointer-2"></i><span>Select</span></button><button class="btn-editor-mode tool-button" data-mode="hand" ${this.activePage.isLocked ? 'disabled' : ''} title="Pan the canvas"><i data-lucide="hand"></i><span>Hand</span></button><button class="btn-editor-mode tool-button" data-mode="draw" ${this.activePage.isLocked ? 'disabled' : ''} title="Draw on the canvas"><i data-lucide="pen-line"></i><span>Draw</span></button></div>
+              <div class="scrapbook-tool-group doodle-color-group"><strong>Doodle color</strong>${['#c85a32', '#2f6f8f', '#6b4f8a', '#3f9b69', '#d69b3d', '#24201d'].map((color) => `<button class="btn-doodle-color color-swatch ${this.doodleColor === color ? 'is-active' : ''}" data-color="${color}" style="--swatch-color: ${color}" aria-label="Choose doodle color ${color}" title="Choose doodle color"></button>`).join('')}</div>
               <div class="scrapbook-tool-group"><strong>Layouts</strong>${TEMPLATES.map((template) => `<button class="btn-apply-template tool-button" data-template="${template.id}" ${this.activePage.isLocked ? 'disabled' : ''}>${template.label}</button>`).join('')}</div>
               <span class="scrapbook-revision">Revision ${this.activePage.revision}</span>
             </div>

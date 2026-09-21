@@ -32,15 +32,18 @@ export function parseAuthHeader(req: Request, _res: Response, next: NextFunction
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.substring(7)
+    : queryToken;
+
+  if (!token) {
     res.status(401).json({
       error: 'Unauthorized',
       message: 'Authentication token required. Please sign in.',
     });
     return;
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username?: string };

@@ -47,11 +47,11 @@ export class Navbar extends UIComponent {
           <nav class="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
             <a href="#/" class="text-xs font-semibold transition-colors flex items-center gap-1.5 ${currentRoute === '/' || currentRoute === '' ? 'text-[var(--accent-sienna)]' : 'text-main hover:text-[var(--accent-sienna)]'}">
               <i data-lucide="layout-grid" class="w-4 h-4"></i>
-              <span>Dashboard</span>
+              <span>Memory shelf</span>
             </a>
             <a href="#/profile" class="text-xs font-semibold transition-colors flex items-center gap-1.5 ${currentRoute === '/profile' ? 'text-[var(--accent-sienna)]' : 'text-main hover:text-[var(--accent-sienna)]'}">
               <i data-lucide="user" class="w-4 h-4"></i>
-              <span>Profile Settings</span>
+              <span>My profile</span>
             </a>
           </nav>
         ` : ''}

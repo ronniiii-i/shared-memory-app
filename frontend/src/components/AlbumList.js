@@ -88,16 +88,17 @@ export class AlbumList extends UIComponent {
     }
 
     return `
-      <div class="max-w-6xl mx-auto px-6 py-12">
+      <div class="memora-dashboard max-w-6xl mx-auto px-6 py-12">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10">
           <div>
-            <h1 class="font-serif-heading text-4xl font-bold text-heading tracking-tight">Shared Scrapbooks</h1>
-            <p class="text-xs sm:text-sm text-muted mt-1">Gather photos, voice notes, and reactions with your crew.</p>
+            <p class="memora-eyebrow">Your memory shelf</p>
+            <h1 class="font-serif-heading text-4xl font-bold text-heading tracking-tight">A place for your people.</h1>
+            <p class="text-xs sm:text-sm text-muted mt-2">Keep the albums, inside jokes, and little stories you do not want to lose.</p>
           </div>
 
           <button class="btn-open-create-modal px-6 py-3 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-2" aria-label="Create new album">
             <i data-lucide="plus" class="w-4 h-4"></i>
-            <span>Create New Album</span>
+            <span>Make a new memory</span>
           </button>
         </div>
 
@@ -182,7 +183,7 @@ export class AlbumList extends UIComponent {
                     <span>${new Date(album.createdAt).toLocaleDateString()}</span>
                   </span>
                   <span class="text-[var(--accent-sienna)] group-hover:translate-x-1 transition-transform flex items-center gap-1 font-semibold text-xs">
-                    <span>Open Scrapbook</span>
+                    <span>Open album</span>
                     <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
                   </span>
                 </div>

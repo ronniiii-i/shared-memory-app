@@ -102,13 +102,13 @@ export class ProfileView extends UIComponent {
     return `
       <div class="max-w-4xl mx-auto px-6 py-12">
         <!-- Header Profile Card -->
-        <div class="editorial-card p-8 rounded-3xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div class="memora-profile-card editorial-card p-8 rounded-3xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div class="flex items-center gap-5">
             <img src="${user.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + user.username}" alt="${user.username}" class="w-20 h-20 rounded-full border-2 border-[var(--border-strong)] bg-stone-100 object-cover" />
             <div>
               <h1 class="font-serif-heading text-3xl font-bold text-heading">${user.displayName || user.username}</h1>
               <p class="text-xs text-muted font-mono mt-1">@${user.username}</p>
-              <p class="text-xs text-muted mt-1">Member since ${new Date(user.createdAt || Date.now()).toLocaleDateString()}</p>
+              <p class="text-xs text-muted mt-1">Keeping memories with Memora since ${new Date(user.createdAt || Date.now()).toLocaleDateString()}</p>
             </div>
           </div>
 
@@ -133,11 +133,11 @@ export class ProfileView extends UIComponent {
         <!-- Stats Overview -->
         <div class="grid grid-cols-2 gap-4 mb-8">
           <div class="editorial-card p-6 rounded-2xl">
-            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Albums Joined</div>
+            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Memory shelves</div>
             <div class="font-serif-heading text-4xl font-bold text-heading mt-2">${stats.albumsCount}</div>
           </div>
           <div class="editorial-card p-6 rounded-2xl">
-            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Photos Contributed</div>
+            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Photos shared</div>
             <div class="font-serif-heading text-4xl font-bold text-heading mt-2">${stats.photosCount}</div>
           </div>
         </div>

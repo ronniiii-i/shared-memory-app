@@ -201,7 +201,7 @@ export class PhotoGallery extends UIComponent {
             <i data-lucide="image" class="w-8 h-8"></i>
           </div>
           <h3 class="font-serif-heading font-bold text-xl text-heading">No photos yet</h3>
-          <p class="text-sm text-muted mt-2">Head to the Canvas or Add Photos tab to start building this album.</p>
+          <p class="text-sm text-muted mt-2">Add a few photographs and this page will become a shared place to wander through them.</p>
         </div>
       `;
     }

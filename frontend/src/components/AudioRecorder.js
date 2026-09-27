@@ -93,20 +93,19 @@ export class AudioRecorder extends UIComponent {
 
   render() {
     return `
-      <div class="bg-black/60 backdrop-blur-md rounded-2xl border border-white/10 p-4 shadow-2xl flex items-center justify-between w-full">
-        <div class="flex items-center gap-3">
-          <div class="w-2 h-2 rounded-full ${this.isRecording ? 'bg-red-500 animate-pulse' : 'bg-stone-500'}"></div>
-          <span class="text-white/90 text-sm font-medium tracking-wide">
-            ${this.isRecording ? 'Recording...' : 'Ready to record'}
-          </span>
+      <div class="memora-recorder">
+        <div class="memora-recorder-state">
+          <span class="memora-recorder-dot${this.isRecording ? ' is-live' : ''}" aria-hidden="true"></span>
+          <span class="memora-recorder-label">${this.isRecording ? 'Recording…' : 'Ready to record'}</span>
         </div>
 
-        <div class="flex items-center gap-4">
-          <span class="record-timer font-mono text-white/50 text-xs tracking-widest">
-            0:${this.secondsLeft.toString().padStart(2, '0')}
-          </span>
-          <button class="btn-toggle-record-action w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-105 cursor-pointer ${this.isRecording ? 'bg-red-500 text-white' : 'bg-white text-black'}">
-            <i data-lucide="${this.isRecording ? 'square' : 'mic'}" class="w-4 h-4 ${this.isRecording ? '' : 'ml-0.5'}"></i>
+        <div class="memora-recorder-actions">
+          <span class="record-timer memora-recorder-timer">0:${this.secondsLeft.toString().padStart(2, '0')}</span>
+          <button
+            class="btn-toggle-record-action memora-recorder-button${this.isRecording ? ' is-live' : ''}"
+            aria-label="${this.isRecording ? 'Stop recording' : 'Start recording'}"
+          >
+            <i data-lucide="${this.isRecording ? 'square' : 'mic'}" aria-hidden="true"></i>
           </button>
         </div>
       </div>

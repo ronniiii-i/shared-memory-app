@@ -97,6 +97,26 @@ export class ScrapbookView extends UIComponent {
     }
   }
 
+  /**
+   * Re-read the album's photos from the server after a local change.
+   *
+   * The upload endpoint hands back a bare record, so pushing it straight into
+   * this.photos duplicated every new photo: once locally, and once more when
+   * the Pusher broadcast for the same upload was applied on top. It also left
+   * reactions and voice notes at zero, because only the list endpoint
+   * attaches them, so the recap stayed stale until a reload. Reading the list
+   * back is the duplicate guard and the freshness fix in one move.
+   */
+  async refreshPhotos() {
+    try {
+      this.photos = await api.get(`/photos/${this.albumId}`);
+      store.photos = this.photos;
+      this.update();
+    } catch (err) {
+      toast.error(`Could not refresh photos: ${err.message}`);
+    }
+  }
+
   setupPusher() {
     this.unsubscribePusher = subscribeToAlbum(this.albumId, {
       onPhotoAdded: (data) => {
@@ -440,10 +460,11 @@ export class ScrapbookView extends UIComponent {
     } else if (this.activeTab === 'upload') {
       this.mountChild('uploader', new PhotoUploader({
         albumId: this.albumId,
-        onUploadComplete: (newPhoto) => {
-          this.photos.unshift(newPhoto);
-          this.activeTab = 'canvas';
-          this.update();
+        onUploadComplete: async () => {
+          // Land on the gallery, not the canvas: the user's next question after
+          // adding a photograph is "is it there?", not "where is it on the page?".
+          this.activeTab = 'gallery';
+          await this.refreshPhotos();
         },
       }), '#uploader-container');
     } else if (this.activeTab === 'invite') {

@@ -189,6 +189,163 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ── The upload review ──────────────────────────────────────────────────────
+   A chosen photograph sits on the page as a small mounted print with its own
+   caption slip underneath, so what is about to be committed is visible before
+   it is committed. A failed entry keeps its place and turns its rule red, the
+   way a correction would be marked up on a page. */
+.memora-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.memora-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.memora-review-head .memora-label {
+  margin: 0;
+}
+
+.memora-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memora-review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.7rem;
+  /* The thumbnail is a fixed square, so the item's height is predictable and
+     nothing shifts when a caption wraps to a second line. */
+  align-items: center;
+}
+
+.memora-review-item.is-failed {
+  border-color: color-mix(in srgb, var(--alert-ink) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--alert-ink) 6%, var(--bg-surface));
+}
+
+.memora-review-thumb {
+  flex: 0 0 auto;
+  width: 3.25rem;
+  height: 3.25rem;
+  object-fit: cover;
+  background: var(--paper-wash);
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  transform: rotate(-1.5deg);
+  box-shadow: var(--shadow-lift);
+}
+
+.memora-review-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.memora-review-name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memora-review-body .memora-label {
+  margin: 0;
+  font-size: 0.6rem;
+}
+
+.memora-review-caption {
+  min-height: 2.15rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.memora-review-error {
+  margin: 0;
+  color: var(--alert-ink);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.memora-review-remove {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-soft),
+    background-color var(--dur-quick) var(--ease-soft),
+    border-color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-review-remove:hover {
+  color: var(--alert-ink);
+  background: color-mix(in srgb, var(--alert-ink) 10%, transparent);
+  border-color: color-mix(in srgb, var(--alert-ink) 30%, transparent);
+}
+
+.memora-review-remove svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.memora-review-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.memora-review-footer .memora-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 30rem) {
+  .memora-review-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .memora-review-footer .memora-button {
+    justify-content: center;
+  }
+}
 .memora-input {
   min-height: 2.7rem;
   padding: 0.7rem 0.85rem;
@@ -1471,6 +1628,10 @@
      uses this instead, so there is one lever rather than a dozen nudges. */
   --accent-ink: color-mix(in srgb, var(--accent-sienna) 78%, #ffffff);
 
+  /* Destructive actions already carry their own hard-coded red in the
+     baseline, so this matches that hue rather than inventing a second one. */
+  --alert-ink: #b8403a;
+
   /* Editorial radii */
   --radius-soft: 0.55rem;
   --radius-card: 1.05rem;
@@ -1503,6 +1664,7 @@
   /* Light-mode sienna on a pale ground is 4.0:1 — fine for a rule, too faint
      for a label. Terracotta is the same hue, read at 6.4:1. */
   --accent-ink: var(--accent-terracotta);
+  --alert-ink: #9c3230;
   --shadow-lift: 0 1px 2px rgba(70, 46, 24, 0.05),
     0 12px 24px -16px rgba(70, 46, 24, 0.24);
   --shadow-float: 0 2px 5px rgba(70, 46, 24, 0.06),
@@ -3043,11 +3205,11 @@
   position: relative;
 }
 
-/* ── The contact sheet ─────────────────────────────────────────────────────
+/* ── The gallery ───────────────────────────────────────────────────────────
    A shared album is a print, not an app grid: one paper surface, a masthead
    that says what and when, and evenly-cut frames with a catalogue number in
    the corner. Captions live on paper below the image rather than behind a
-   hover scrim, so the sheet reads without any interaction at all. */
+   hover scrim, so the gallery reads without any interaction at all. */
 .memora-contact-sheet {
   display: flex;
   flex-direction: column;

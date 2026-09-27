@@ -1673,6 +1673,42 @@
     0 40px 70px -40px rgba(70, 46, 24, 0.34);
 }
 
+@layer base {
+  /* ── Icon + label buttons ───────────────────────────────────────────────
+     Lucide stamps width/height 24 onto every icon it converts, which is
+     larger than most button labels. A bare .memora-button is also neither a
+     flex row nor nowrap, so the glyph ends up oversized and the label wraps
+     underneath it. Normalise both here.
+
+     This lives in the base layer on purpose: component rules such as
+     .memora-button-inline svg, and Tailwind size utilities like .w-7, both
+     sit above base and so still win where a specific size was asked for. */
+  button > svg,
+  a > svg,
+  label > svg,
+  summary > svg {
+    width: 1.1em;
+    height: 1.1em;
+    flex: 0 0 auto;
+  }
+
+  button:has(> svg),
+  a:has(> svg) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45em;
+    white-space: nowrap;
+  }
+
+  /* Icons that are the entire control still need to be centred and must not
+     inherit the label's inline gap. */
+  button > svg:only-child,
+  a > svg:only-child {
+    margin-inline: 0;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Memora — page scaffolding
    ═══════════════════════════════════════════════════════════════════════ */

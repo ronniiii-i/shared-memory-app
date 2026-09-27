@@ -10,6 +10,7 @@
  */
 
 import { subscribe } from './Store.js';
+import { observeReveals } from './reveal.js';
 import { createIcons, icons } from 'lucide';
 
 export class UIComponent {
@@ -104,6 +105,9 @@ export class UIComponent {
     // Render Lucide icons automatically
     this.refreshIcons();
 
+    // Register scroll-reveal targets (no-op unless .memora-reveal is used)
+    this.refreshReveals();
+
     // Call lifecycle hook
     this.onMount();
 
@@ -186,6 +190,9 @@ export class UIComponent {
     // Refresh Lucide icons
     this.refreshIcons();
 
+    // Re-register scroll-reveal targets against the fresh DOM
+    this.refreshReveals();
+
     // Re-bind all event listeners by calling onMount again.
     // onMount() is the single authoritative place for delegate() calls,
     // and it must run after every render (both initial mount and updates).
@@ -208,6 +215,17 @@ export class UIComponent {
       } catch (err) {
         // Safe catch if lucide package is initializing
       }
+    }
+  }
+
+  /**
+   * Register any `.memora-reveal` targets in this component's scope so they
+   * animate in on first scroll. Handled by core/reveal.js; the timing and
+   * easing live in CSS.
+   */
+  refreshReveals() {
+    if (this.element) {
+      observeReveals(this.element);
     }
   }
 

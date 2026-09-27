@@ -250,6 +250,44 @@
   font-weight: 800;
 }
 
+/* Counts pulled out of the album and set beside the note, so the recap
+   reads as a summary rather than a paragraph. */
+.memora-recap-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1.1rem;
+}
+
+.memora-recap-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-leaf) 24%, transparent);
+  border-radius: var(--radius-pill);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.memora-recap-chip svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  align-self: center;
+  color: var(--accent-leaf);
+}
+
+.memora-recap-chip-value {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent-leaf);
+}
+
 /* Consumer-facing Memora welcome page */
 .memora-landing {
   overflow: hidden;
@@ -1390,5 +1428,2841 @@
   .picker-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — editorial token tier
+   ─────────────────────────────────────────────────────────────────────
+   A warm paper-and-ink layer that sits ON TOP of the base palette in
+   @layer base. Those base tokens (--bg-surface, --border-color,
+   --accent-sienna, --polaroid-*) are read directly by the scrapbook
+   editor, so they are never modified here. Everything below is additive.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Ink & paper accents — the doodle palette is aligned to the editor
+     swatches in ScrapbookWorkspace so both halves feel like one product. */
+  --accent-honey: #d69b3d;
+  --doodle-sienna: #c85a32;
+  --doodle-sky: #2f6f8f;
+  --doodle-plum: #6b4f8a;
+  --doodle-leaf: #3f9b69;
+  --doodle-honey: #d69b3d;
+  --doodle-ink: #24201d;
+
+  /* Warm surfaces */
+  --surface-raised: color-mix(
+    in srgb,
+    var(--bg-surface) 90%,
+    var(--paper-wash)
+  );
+  --surface-sunken: color-mix(
+    in srgb,
+    var(--bg-primary) 84%,
+    var(--bg-surface)
+  );
+  --surface-tint: color-mix(in srgb, var(--accent-sienna) 8%, var(--bg-surface));
+  --paper-deep: #e9dcc6;
+  --hairline: color-mix(in srgb, var(--border-strong) 58%, transparent);
+
+  /* Accent ink: sienna is the brand colour and is fine for rules, fills and
+     large display type, but at small bold sizes it drops under 4.5:1 on a
+     pale ground. Anything that has to be *read* rather than merely noticed
+     uses this instead, so there is one lever rather than a dozen nudges. */
+  --accent-ink: color-mix(in srgb, var(--accent-sienna) 78%, #ffffff);
+
+  /* Editorial radii */
+  --radius-soft: 0.55rem;
+  --radius-card: 1.05rem;
+  --radius-sheet: 1.5rem;
+  --radius-pill: 999px;
+
+  /* Warm elevation — tinted with ink, never neutral grey */
+  --shadow-lift: 0 1px 2px rgba(46, 30, 18, 0.05),
+    0 10px 22px -14px rgba(46, 30, 18, 0.32);
+  --shadow-float: 0 2px 5px rgba(46, 30, 18, 0.06),
+    0 24px 46px -22px rgba(46, 30, 18, 0.42);
+  --shadow-page: 0 1px 0 rgba(46, 30, 18, 0.05),
+    0 40px 70px -40px rgba(46, 30, 18, 0.5);
+
+  /* Motion language */
+  --dur-quick: 150ms;
+  --dur-base: 280ms;
+  --dur-slow: 680ms;
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-lift: cubic-bezier(0.34, 1.3, 0.44, 1);
+}
+
+[data-theme="light"] {
+  --accent-honey: #bd7d20;
+  --surface-raised: #fffefb;
+  --surface-sunken: #f7f3ed;
+  --surface-tint: color-mix(in srgb, var(--accent-sienna) 6%, #ffffff);
+  --paper-deep: #f1e7d6;
+  --hairline: #e5dbcc;
+  /* Light-mode sienna on a pale ground is 4.0:1 — fine for a rule, too faint
+     for a label. Terracotta is the same hue, read at 6.4:1. */
+  --accent-ink: var(--accent-terracotta);
+  --shadow-lift: 0 1px 2px rgba(70, 46, 24, 0.05),
+    0 12px 24px -16px rgba(70, 46, 24, 0.24);
+  --shadow-float: 0 2px 5px rgba(70, 46, 24, 0.06),
+    0 26px 48px -24px rgba(70, 46, 24, 0.3);
+  --shadow-page: 0 1px 0 rgba(70, 46, 24, 0.05),
+    0 40px 70px -40px rgba(70, 46, 24, 0.34);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — page scaffolding
+   ═══════════════════════════════════════════════════════════════════════ */
+/* Wide enough to hold the scrapbook editor at its original working width
+   (it needs every pixel for the canvas), while reading sections below
+   opt into a narrower measure via .memora-settings. */
+.memora-page {
+  position: relative;
+  max-width: 82rem;
+  margin: 0 auto;
+  padding: clamp(1.75rem, 5vw, 3.25rem) clamp(1rem, 4vw, 2rem) 4.5rem;
+  isolation: isolate;
+}
+
+/* A quiet warm wash so page space is never flat.
+   Fixed to the viewport rather than inset into the page box, so it always
+   spans the full width — including when the page is wider than .memora-page's
+   82rem measure — and always covers the full height, even in a loading or
+   empty state whose content is shorter than the screen. The page wrappers
+   (.memora-page / .memora-dashboard) establish an isolated stacking context,
+   so z-index: -1 keeps the wash behind content but in front of body. */
+.memora-wash::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    radial-gradient(
+      circle at 10% 4%,
+      color-mix(in srgb, var(--accent-sienna) 10%, transparent),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 92% 12%,
+      color-mix(in srgb, var(--accent-honey) 9%, transparent),
+      transparent 36%
+    ),
+    /* A matching pair near the bottom edge, so a short page (or the bottom of
+       a long one) is lit the same way the top is. */
+    radial-gradient(
+      circle at 8% 96%,
+      color-mix(in srgb, var(--accent-leaf) 7%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 90% 88%,
+      color-mix(in srgb, var(--accent-sienna) 8%, transparent),
+      transparent 42%
+    );
+  pointer-events: none;
+}
+
+.memora-kicker {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — surfaces
+   .memora-panel  → feature panels (upload, invite, recap). Carries the
+                    hand-drawn accent mark in its ::before.
+   .memora-sheet  → quieter chrome for dashboards, settings, profile.
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-sheet {
+  position: relative;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  color: var(--text-main);
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift);
+  transition:
+    background-color var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft);
+}
+
+.memora-sheet-flat {
+  background: var(--surface-sunken);
+  box-shadow: none;
+}
+
+.memora-sheet h2,
+.memora-sheet h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.memora-sheet-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.15rem;
+}
+
+.memora-sheet-title svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--accent-sienna);
+  flex: 0 0 auto;
+}
+
+.memora-sheet-copy {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.memora-divider {
+  height: 1px;
+  margin: 1.5rem 0;
+  background: var(--hairline);
+  border: 0;
+}
+
+/* Opt a surface into hosting a .memora-doodles layer. The isolation keeps
+   the accent layer from capturing any positioned child that escapes. */
+.memora-doodle-host {
+  position: relative;
+  isolation: isolate;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — modal scrim
+   Replaces the raw `bg-stone-950/80 backdrop-blur-sm` overlays that were
+   duplicated across the album modal and the auth modal.
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-modal-scrim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  animation: memora-scrim-in var(--dur-base) var(--ease-soft) both;
+}
+
+@keyframes memora-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.memora-modal {
+  width: min(30rem, 100%);
+  margin: auto;
+  padding: clamp(1.4rem, 4vw, 2rem);
+  box-shadow: var(--shadow-page);
+  animation: memora-modal-in 420ms var(--ease-lift) both;
+}
+
+@keyframes memora-modal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1.25rem, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.memora-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.memora-modal-title {
+  margin: 0.3rem 0 0;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(1.5rem, 4vw, 1.95rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.memora-form {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.memora-modal-actions {
+  margin-top: 0.4rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.memora-button-inline {
+  width: auto;
+  min-height: 2.7rem;
+  padding-inline: 1.25rem;
+  box-shadow: 0 4px 0
+    color-mix(in srgb, var(--accent-terracotta) 70%, transparent);
+  transition:
+    transform var(--dur-quick) var(--ease-lift),
+    box-shadow var(--dur-quick) var(--ease-lift),
+    background-color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-button-inline svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.memora-button-inline:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0
+    color-mix(in srgb, var(--accent-terracotta) 70%, transparent);
+}
+
+.memora-button-inline:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0
+    color-mix(in srgb, var(--accent-terracotta) 70%, transparent);
+}
+
+/* A soft, single-line keycap for codes, handles and share codes */
+.memora-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.55rem;
+  color: var(--accent-sienna);
+  background: color-mix(in srgb, var(--accent-sienna) 10%, transparent);
+  border-radius: 0.4rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.memora-field-row {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.memora-field-row .memora-control {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Share codes ───────────────────────────────────────────────────────────
+   A code is an identifier a person reads aloud and types by hand, so it gets
+   monospace, wide tracking, generous hit area, and a visible invalid state. */
+.memora-code-lg {
+  padding: 0.2rem 0.7rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.14em;
+}
+
+.memora-code-field {
+  display: flex;
+  gap: 0.55rem;
+  align-items: stretch;
+}
+
+.memora-code-field .memora-code-input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.memora-code-field .memora-pill {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.memora-control-invalid {
+  border-color: #d0584f;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #d0584f 18%, transparent);
+}
+
+[data-theme="light"] .memora-control-invalid {
+  border-color: #b23f36;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #b23f36 16%, transparent);
+}
+
+.memora-field-hint {
+  margin: 0.4rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.memora-field-hint strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+/* The settings row that shows (or edits) an album's code. */
+.memora-code-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.memora-code-row > div:first-child {
+  min-width: 0;
+}
+
+.memora-code-row .memora-kicker {
+  margin-bottom: 0.45rem;
+}
+
+.memora-code-row-actions {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .memora-code-row {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .memora-code-row-actions {
+    flex: 0 0 auto;
+    padding-top: 1.35rem;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — form language
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--text-main);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.memora-label-quiet {
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.memora-control {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.75rem 0.95rem;
+  color: var(--text-main);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-soft);
+  font-size: 0.82rem;
+  transition:
+    border-color var(--dur-quick) var(--ease-soft),
+    box-shadow var(--dur-quick) var(--ease-soft),
+    background-color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-control::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.memora-control:hover {
+  border-color: var(--border-strong);
+}
+
+.memora-control:focus {
+  outline: none;
+  border-color: var(--accent-sienna);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-sienna) 14%, transparent);
+}
+
+.memora-control-mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.01em;
+}
+
+.memora-button-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.memora-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+/* A gap-free vertical stack for forms that are toggled with `.hidden`.
+   Deliberately sets no `display`, so the utility keeps winning. */
+.memora-form-stack > * + * {
+  margin-top: 1rem;
+}
+
+/* Deliberately sets no `display` either — the error boxes are shown and
+   hidden by adding/removing `.hidden`. */
+.memora-form-error {
+  padding: 0.7rem 0.9rem;
+  color: #d0584f;
+  background: color-mix(in srgb, #d0584f 12%, transparent);
+  border: 1px solid color-mix(in srgb, #d0584f 30%, transparent);
+  border-radius: var(--radius-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+
+[data-theme="light"] .memora-form-error {
+  color: #b23f36;
+}
+
+/* The sign-in / register tab strip in the auth modal.
+   Active state still lives on the buttons as border/text colour utilities
+   (main.js toggles them), so this rule must not set `color` or any border
+   colour — only the shape. */
+.memora-auth-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 1.5rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.memora-auth-tabs > button {
+  flex: 1;
+  padding: 0.7rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-soft),
+    border-color var(--dur-quick) var(--ease-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — navigation chrome
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem clamp(1rem, 4vw, 2rem);
+  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  transition:
+    background-color var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft);
+}
+
+.memora-nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-soft);
+  z-index: 1;
+}
+
+.memora-wordmark {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-heading);
+  transition: color var(--dur-base) var(--ease-soft);
+}
+
+.memora-wordmark-mark {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  color: #fff;
+  background: var(--accent-sienna);
+  border-radius: 0.5rem 0.7rem 0.45rem 0.65rem;
+  box-shadow: 0 3px 0
+    color-mix(in srgb, var(--accent-terracotta) 70%, transparent);
+  transform: rotate(-4deg);
+  transition:
+    transform var(--dur-base) var(--ease-lift),
+    background-color var(--dur-base) var(--ease-soft);
+}
+
+.memora-wordmark-mark svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.memora-nav-brand:hover .memora-wordmark-mark {
+  transform: rotate(5deg) scale(1.06);
+}
+
+.memora-nav-links {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: none;
+  align-items: center;
+  gap: 1.9rem;
+  transform: translate(-50%, -50%);
+}
+
+.memora-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: color var(--dur-base) var(--ease-soft);
+}
+
+.memora-nav-link svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.memora-nav-link::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.2rem;
+  left: 0;
+  height: 2px;
+  content: "";
+  background: var(--accent-sienna);
+  border-radius: 2px;
+  opacity: 0;
+  transform: scaleX(0.2);
+  transform-origin: center;
+  transition:
+    transform var(--dur-base) var(--ease-lift),
+    opacity var(--dur-base) var(--ease-soft);
+}
+
+.memora-nav-link:hover,
+.memora-nav-link.is-active {
+  color: var(--text-heading);
+}
+
+.memora-nav-link:hover::after,
+.memora-nav-link.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.memora-nav-link.is-active {
+  color: var(--accent-ink);
+}
+
+.memora-nav-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1;
+}
+
+.memora-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.9rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-base) var(--ease-soft),
+    background-color var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-pill svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.memora-pill:hover {
+  color: var(--text-heading);
+  background: var(--surface-sunken);
+  border-color: var(--hairline);
+}
+
+.memora-pill-quiet {
+  color: var(--text-muted);
+}
+
+.memora-pill-primary {
+  color: #fff;
+  background: var(--accent-sienna);
+  border-color: var(--accent-sienna);
+  box-shadow: 0 3px 0
+    color-mix(in srgb, var(--accent-terracotta) 72%, transparent);
+}
+
+.memora-pill-primary:hover {
+  color: #fff;
+  background: var(--accent-terracotta);
+  border-color: var(--accent-terracotta);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0
+    color-mix(in srgb, var(--accent-terracotta) 72%, transparent);
+}
+
+.memora-pill-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0
+    color-mix(in srgb, var(--accent-terracotta) 72%, transparent);
+}
+
+.memora-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 0 0 2px var(--bg-primary);
+  transition: transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-identity-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.2rem;
+  color: var(--text-main);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition:
+    background-color var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft);
+}
+
+.memora-identity-link:hover {
+  background: var(--surface-sunken);
+  border-color: var(--hairline);
+}
+
+.memora-identity-link:hover .memora-avatar {
+  transform: scale(1.06);
+}
+
+@media (min-width: 768px) {
+  .memora-nav-links {
+    display: flex;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — album dashboard & album cards
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-dashboard {
+  position: relative;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: clamp(1.75rem, 5vw, 3.25rem) clamp(1rem, 4vw, 2rem) 5rem;
+  isolation: isolate;
+}
+
+.memora-dash-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2.5rem;
+}
+
+/* Two doors, side by side: start something, or walk into something else.
+   The quiet variant is the secondary so the accent stays on "new". */
+.memora-dash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.memora-dash-title {
+  margin: 0;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3.1rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--text-heading);
+}
+
+.memora-dash-copy {
+  max-width: 30rem;
+  margin: 0.85rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+@media (min-width: 640px) {
+  .memora-dash-header {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.memora-album-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: clamp(1rem, 2.5vw, 1.6rem);
+}
+
+.memora-album-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.4rem;
+  min-height: 12.5rem;
+  padding: 1.5rem 1.5rem 1.25rem;
+  color: var(--text-main);
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift);
+  transition:
+    transform var(--dur-base) var(--ease-lift),
+    box-shadow var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft);
+}
+
+/* the sheet peeking out from behind the album card */
+.memora-album-card::before {
+  position: absolute;
+  inset: 0.55rem -0.45rem -0.55rem 0.45rem;
+  z-index: -1;
+  content: "";
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  opacity: 0;
+  transform: rotate(-1.4deg);
+  transition:
+    opacity var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-album-card:hover,
+.memora-album-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: color-mix(
+    in srgb,
+    var(--accent-sienna) 42%,
+    var(--hairline)
+  );
+  box-shadow: var(--shadow-float);
+}
+
+.memora-album-card:hover::before,
+.memora-album-card:focus-visible::before {
+  opacity: 1;
+  transform: rotate(-2.4deg) translate3d(-2px, 3px, 0);
+}
+
+.memora-album-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.memora-album-title {
+  margin: 0;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-heading);
+  transition: color var(--dur-base) var(--ease-soft);
+}
+
+.memora-album-card:hover .memora-album-title {
+  color: var(--accent-sienna);
+}
+
+.memora-album-role {
+  flex: 0 0 auto;
+  padding-top: 0.25rem;
+  color: var(--text-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.82rem;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.memora-album-desc {
+  margin: 0.65rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.memora-album-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.memora-album-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.memora-album-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.memora-album-date svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--accent-sienna);
+}
+
+.memora-album-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.memora-album-cta svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  transition: transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-album-card:hover .memora-album-cta svg {
+  transform: translateX(4px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — album header + tab set
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-album-head {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 1024px) {
+  .memora-album-head {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.memora-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.72rem;
+}
+
+.memora-crumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  transition: color var(--dur-base) var(--ease-soft);
+}
+
+.memora-crumb-back svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  transition: transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-crumb-back:hover {
+  color: var(--accent-sienna);
+}
+
+.memora-crumb-back:hover svg {
+  transform: translateX(-3px);
+}
+
+.memora-album-head h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.memora-album-head-copy {
+  max-width: 36rem;
+  margin: 0.7rem 0 0;
+  color: var(--text-muted);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.05rem;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.memora-tabset {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 1px 2px rgba(46, 30, 18, 0.04);
+}
+
+.memora-tabset::-webkit-scrollbar {
+  display: none;
+}
+
+.memora-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.95rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-soft),
+    background-color var(--dur-base) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-soft);
+}
+
+.memora-tab svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+}
+
+.memora-tab:hover {
+  color: var(--text-heading);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+}
+
+.memora-tab[aria-selected="true"] {
+  color: var(--accent-ink);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lift);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — album settings (admin)
+   Reading-width stack. The canvas tab is intentionally excluded so the
+   scrapbook editor keeps its full working area.
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-settings {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.memora-settings-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+@media (min-width: 640px) {
+  .memora-settings-head {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* The grid owns the vertical rhythm here, so the per-block bottom
+   margins the components carry for standalone use are dropped. */
+.memora-settings > * {
+  margin-bottom: 0;
+}
+
+.memora-button-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fff;
+  background: #b8403a;
+  border: 1px solid #b8403a;
+  box-shadow: 0 4px 0 #8d2f2a;
+  transition:
+    transform var(--dur-quick) var(--ease-lift),
+    box-shadow var(--dur-quick) var(--ease-lift),
+    background-color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-button-danger svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.memora-button-danger:hover {
+  background: #a5352f;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #8d2f2a;
+}
+
+.memora-button-danger:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #8d2f2a;
+}
+
+.memora-pill-danger {
+  color: #c0524a;
+  border-color: color-mix(in srgb, #c0524a 30%, transparent);
+}
+
+[data-theme="light"] .memora-pill-danger {
+  color: #a5352f;
+}
+
+.memora-pill-danger:hover {
+  color: #fff;
+  background: #b8403a;
+  border-color: #b8403a;
+  box-shadow: none;
+  transform: none;
+}
+
+.memora-roster {
+  margin-top: 1.1rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.memora-roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.memora-roster-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.memora-roster-id {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.memora-roster-avatar {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+}
+
+.memora-roster-name {
+  display: block;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.memora-roster-role {
+  display: inline-block;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.memora-roster-owner {
+  color: var(--accent-leaf);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.memora-moderation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+}
+
+.memora-moderation-cell {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-soft);
+}
+
+.memora-moderation-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+.memora-moderation-cell:hover img {
+  transform: scale(1.06);
+}
+
+.memora-moderation-hit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: #5e1c1a;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--dur-base) var(--ease-soft);
+}
+
+.memora-moderation-cell:hover .memora-moderation-hit,
+.memora-moderation-hit:focus-visible {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — empty states
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-empty {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  max-width: 30rem;
+  margin: 2.5rem auto;
+  padding: clamp(2rem, 6vw, 3.25rem) clamp(1.25rem, 4vw, 2.5rem);
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-lift);
+  isolation: isolate;
+}
+
+.memora-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--accent-sienna);
+  background: color-mix(in srgb, var(--accent-sienna) 12%, transparent);
+  border-radius: 0.9rem 1.1rem 0.8rem 1rem;
+  transform: rotate(-4deg);
+}
+
+.memora-empty-mark svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.memora-empty h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.memora-empty p {
+  max-width: 24rem;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.memora-empty-action {
+  margin-top: 1.1rem;
+}
+
+/* Two ways out of an empty shelf, stacked until there's room side by side. */
+.memora-empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: stretch;
+  margin-top: 1.35rem;
+}
+
+.memora-empty-actions .memora-empty-action {
+  margin-top: 0;
+  justify-content: center;
+}
+
+@media (min-width: 420px) {
+  .memora-empty-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* A softer, warning-toned variant of the mark for dead-end states */
+.memora-empty-mark-warn {
+  color: #d0584f;
+  background: color-mix(in srgb, #d0584f 12%, transparent);
+  transform: rotate(4deg);
+}
+
+[data-theme="light"] .memora-empty-mark-warn {
+  color: #b23f36;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — profile
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+}
+
+@media (min-width: 768px) {
+  .memora-profile-card {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.memora-profile-id {
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+}
+
+.memora-profile-avatar {
+  width: 4.75rem;
+  height: 4.75rem;
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  border-radius: 1.35rem 1.6rem 1.2rem 1.5rem;
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    var(--shadow-lift);
+  transform: rotate(-2.5deg);
+  transition: transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-profile-card:hover .memora-profile-avatar {
+  transform: rotate(1.5deg) scale(1.04);
+}
+
+.memora-profile-card h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.memora-profile-handle {
+  margin: 0.3rem 0 0;
+  color: var(--accent-ink);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1rem;
+  font-style: italic;
+}
+
+.memora-profile-since {
+  margin: 0.45rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.memora-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.memora-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.25rem 1.4rem;
+}
+
+.memora-stat-value {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 2.75rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text-heading);
+}
+
+.memora-stat-label {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+/* ── Profile picture picker ───────────────────────────────────────────────
+   A person picks a picture; they never paste a URL. The whole row is one
+   quiet inset surface so it reads as part of the sheet it sits in. */
+
+/* Visually hidden, but still focusable and still the real control behind its
+   label — unlike .hidden (display: none), which would put it out of reach of
+   the keyboard entirely. */
+.memora-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.memora-avatar-picker {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-top: 1.5rem;
+  padding: 1.15rem 1.25rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+}
+
+.memora-avatar-picker-preview {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex: 0 0 auto;
+  object-fit: cover;
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 1.2rem 1.45rem 1.05rem 1.35rem;
+  box-shadow: var(--shadow-lift);
+  transform: rotate(-1.5deg);
+}
+
+.memora-avatar-picker-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.memora-avatar-picker-body .memora-sheet-copy {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.memora-avatar-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.6rem;
+}
+
+.memora-avatar-choose {
+  cursor: pointer;
+}
+
+/* The real control is off-screen, so mirror its focus onto the label that
+   stands in for it visually. */
+.memora-avatar-choose:focus-within,
+.memora-avatar-choose:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-float);
+}
+
+.memora-avatar-choose:focus-within {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+.memora-avatar-spinner {
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 2px solid color-mix(in srgb, var(--accent-sienna) 28%, transparent);
+  border-top-color: var(--accent-sienna);
+  border-radius: 50%;
+  animation: spin 720ms linear infinite;
+}
+
+@media (max-width: 480px) {
+  .memora-avatar-picker {
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+}
+
+.memora-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--radius-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.memora-notice svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.memora-notice-success {
+  color: var(--doodle-leaf);
+  background: color-mix(in srgb, var(--doodle-leaf) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--doodle-leaf) 32%, transparent);
+}
+
+.memora-notice-error {
+  color: #d0584f;
+  background: color-mix(in srgb, #d0584f 12%, transparent);
+  border: 1px solid color-mix(in srgb, #d0584f 30%, transparent);
+}
+
+[data-theme="light"] .memora-notice-error {
+  color: #b23f36;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — gallery
+   ═══════════════════════════════════════════════════════════════════════ */
+.gallery-wrapper {
+  position: relative;
+}
+
+/* ── The contact sheet ─────────────────────────────────────────────────────
+   A shared album is a print, not an app grid: one paper surface, a masthead
+   that says what and when, and evenly-cut frames with a catalogue number in
+   the corner. Captions live on paper below the image rather than behind a
+   hover scrim, so the sheet reads without any interaction at all. */
+.memora-contact-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 3vw, 2.25rem);
+  padding-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.memora-sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 2rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.memora-sheet-head-copy {
+  min-width: 0;
+}
+
+.memora-sheet-title-lg {
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  letter-spacing: -0.025em;
+}
+
+.memora-sheet-head .memora-sheet-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.memora-sheet-range {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.72rem;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.memora-sheet-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.memora-tools-label {
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* A quiet, inset group of options — reads as one control, not three buttons. */
+.memora-segmented {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+}
+
+.memora-segment {
+  padding: 0.38rem 0.85rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-quick) var(--ease-soft),
+    color var(--dur-quick) var(--ease-soft),
+    box-shadow var(--dur-quick) var(--ease-soft);
+}
+
+.memora-segment:hover {
+  color: var(--text-main);
+}
+
+.memora-segment.is-active {
+  color: var(--text-main);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lift);
+}
+
+.memora-segment:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 1px;
+}
+
+.memora-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1rem, 2.2vw, 1.75rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 620px) {
+  .memora-contact-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .memora-contact-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1420px) {
+  .memora-contact-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.memora-frame {
+  min-width: 0;
+}
+
+/* The whole frame is the hit target, and it is a real control in the tab
+   order — so no inner element may steal the click. */
+.memora-frame-hit {
+  display: block;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  font: inherit;
+}
+
+.memora-frame-plate {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift);
+  transition:
+    transform var(--dur-base) var(--ease-lift),
+    box-shadow var(--dur-base) var(--ease-soft),
+    border-color var(--dur-base) var(--ease-soft);
+}
+
+.memora-frame-plate img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--dur-slow) var(--ease-soft);
+}
+
+.memora-frame-hit:hover .memora-frame-plate,
+.memora-frame-hit:focus-visible .memora-frame-plate {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--accent-sienna) 32%, var(--hairline));
+  box-shadow: var(--shadow-float);
+}
+
+.memora-frame-hit:hover .memora-frame-plate img {
+  transform: scale(1.05);
+}
+
+.memora-frame-hit:focus-visible {
+  outline: none;
+}
+
+.memora-frame-hit:focus-visible .memora-frame-plate {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 3px;
+}
+
+/* Catalogue number, printed on a paper chip so it survives any photograph. */
+.memora-frame-no {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  color: #4a3b31;
+  background: color-mix(in srgb, var(--polaroid-bg) 88%, transparent);
+  border-radius: 0.3rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+}
+
+.memora-frame-no-static {
+  position: static;
+  padding: 0.05rem 0.32rem;
+  font-size: 0.58rem;
+}
+
+.memora-frame-stamps {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.memora-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.12rem 0.42rem;
+  color: #4a3b31;
+  background: color-mix(in srgb, var(--polaroid-bg) 88%, transparent);
+  border-radius: var(--radius-pill);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.memora-stamp svg {
+  width: 0.68rem;
+  height: 0.68rem;
+}
+
+.memora-frame-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.15rem 0;
+}
+
+.memora-frame-text {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-main);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.92rem;
+  font-style: italic;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.memora-frame-text-quiet {
+  color: var(--text-muted);
+}
+
+.memora-frame-by {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.memora-frame-dot {
+  color: var(--text-muted);
+  padding: 0 0.15rem;
+}
+
+/* ── Lightbox ──────────────────────────────────────────────────────────────
+   A darkroom: the scrim stays warm-black so photographs keep their colour,
+   and everything around the picture is editorial rather than chrome. It is
+   portalled to <body> (see .memora-lightbox-host) because the page wrappers
+   are isolated stacking contexts that would trap a nested overlay. */
+.memora-lightbox-host {
+  display: contents;
+}
+
+.memora-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(16, 12, 10, 0.94);
+  overscroll-behavior: contain;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: memora-scrim-in var(--dur-base) var(--ease-soft) both;
+}
+
+.memora-lightbox-close,
+.memora-lightbox-nav {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  color: #f6efe8;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-soft),
+    transform var(--dur-quick) var(--ease-lift);
+}
+
+.memora-lightbox-close:hover,
+.memora-lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(1.06);
+}
+
+.memora-lightbox-close:focus-visible,
+.memora-lightbox-nav:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+.memora-lightbox-close svg,
+.memora-lightbox-nav svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.memora-lightbox-close {
+  top: 1rem;
+  right: 1rem;
+}
+
+.memora-lightbox-nav {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.memora-lightbox-nav:hover {
+  transform: translateY(-50%) scale(1.06);
+}
+
+.memora-lightbox-nav-prev {
+  left: 0.6rem;
+}
+
+.memora-lightbox-nav-next {
+  right: 0.6rem;
+}
+
+.memora-lightbox-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 900px) {
+  .memora-lightbox-content {
+    flex-direction: row;
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+  }
+}
+
+.memora-lightbox-stage {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.memora-lightbox-plate {
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0c0908;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.9rem;
+  box-shadow: 0 2.5rem 5rem -1.5rem rgba(0, 0, 0, 0.85);
+}
+
+.memora-lightbox-plate img {
+  display: block;
+  max-width: 100%;
+  max-height: 52vh;
+  object-fit: contain;
+}
+
+@media (min-width: 900px) {
+  .memora-lightbox-plate img {
+    max-height: min(72vh, 100%);
+  }
+}
+
+/* The caption reads as printed matter under the picture, not a floating pill. */
+.memora-lightbox-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  max-width: 34rem;
+  text-align: center;
+}
+
+.memora-lightbox-quote {
+  margin: 0;
+  color: #fdf8f2;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.memora-lightbox-quote-quiet {
+  color: rgba(246, 239, 232, 0.55);
+}
+
+.memora-lightbox-counter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: rgba(246, 239, 232, 0.55);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
+
+.memora-lightbox-counter .memora-frame-no-static {
+  color: #f6efe8;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* The counter reuses the sheet's separator class, which normally inherits
+   --text-muted. The lightbox is dark in both themes, so in light mode that
+   would drop a warm mid-brown onto a near-black scrim. Pin it to the
+   lightbox's own ink instead of letting the page theme through. */
+.memora-lightbox .memora-frame-dot {
+  color: rgba(246, 239, 232, 0.55);
+}
+
+.memora-lightbox-panel {
+  display: flex;
+  width: 100%;
+  max-height: 40vh;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 1.4rem;
+  color: #f6efe8;
+  background: color-mix(in srgb, #1a1512 82%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 1.35rem;
+  box-shadow: 0 2rem 4rem -1.5rem rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+@media (min-width: 900px) {
+  .memora-lightbox-panel {
+    width: 21.5rem;
+    max-height: 85vh;
+  }
+}
+
+.memora-lightbox-id {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.memora-lightbox-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  color: #fdf8f2;
+  background: linear-gradient(
+    145deg,
+    var(--accent-sienna),
+    var(--accent-terracotta)
+  );
+  border-radius: 0.85rem 1rem 0.8rem 0.95rem;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  transform: rotate(-4deg);
+}
+
+.memora-lightbox-name {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.memora-lightbox-date {
+  margin-top: 0.15rem;
+  color: rgba(246, 239, 232, 0.5);
+  font-size: 0.66rem;
+}
+
+.memora-lightbox-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 1.1rem;
+}
+
+.memora-lightbox-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.memora-lightbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(246, 239, 232, 0.7);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.memora-lightbox-label svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.memora-lightbox-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  color: rgba(246, 239, 232, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-soft),
+    color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-lightbox-mic svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.memora-lightbox-mic:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.memora-lightbox-mic.is-active {
+  color: #fff;
+  background: var(--accent-sienna);
+  border-color: transparent;
+}
+
+.memora-lightbox-mic:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+.memora-lightbox-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memora-lightbox-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.memora-lightbox-blank {
+  margin: 0;
+  padding: 1.1rem 0.4rem;
+  color: rgba(246, 239, 232, 0.55);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+}
+
+/* A recorded note: a card, a play control, and a scrubbable waveform. */
+.memora-voice-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.9rem;
+}
+
+.memora-voice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.memora-voice-who {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memora-voice-len {
+  flex: 0 0 auto;
+  color: var(--accent-sienna);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.memora-voice-body {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.memora-voice-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: 0 0 auto;
+  padding: 0;
+  color: #1c1512;
+  background: #f6efe8;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--dur-quick) var(--ease-lift);
+}
+
+.memora-voice-play:hover {
+  transform: scale(1.08);
+}
+
+.memora-voice-play:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+.memora-voice-play svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: currentColor;
+}
+
+.memora-voice-track {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  height: 2rem;
+  min-width: 0;
+  padding: 0 0.55rem;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.32);
+  border-radius: 0.6rem;
+  cursor: pointer;
+}
+
+.memora-voice-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: color-mix(in srgb, var(--accent-sienna) 30%, transparent);
+  pointer-events: none;
+  transition: width 100ms linear;
+}
+
+.memora-voice-wave {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 0.85rem;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.memora-voice-wave span {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  border-radius: 999px;
+}
+
+.memora-lightbox-reactions {
+  margin-top: auto;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.memora-reaction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.9rem;
+}
+
+.memora-reaction {
+  padding: 0.2rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  background: none;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition:
+    transform var(--dur-quick) var(--ease-lift),
+    background-color var(--dur-quick) var(--ease-soft);
+}
+
+.memora-reaction:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.18) translateY(-2px);
+}
+
+.memora-reaction:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+/* ── Voice-note recorder ───────────────────────────────────────────────────
+   Sits inside the lightbox panel, so it borrows that darkroom's palette. */
+.memora-recorder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.9rem;
+}
+
+.memora-recorder-state {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.memora-recorder-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  background: rgba(246, 239, 232, 0.3);
+  border-radius: 50%;
+}
+
+.memora-recorder-dot.is-live {
+  background: #d0584f;
+  animation: memora-pulse 1.1s var(--ease-soft) infinite;
+}
+
+.memora-recorder-label {
+  color: rgba(246, 239, 232, 0.85);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.memora-recorder-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.memora-recorder-timer {
+  color: rgba(246, 239, 232, 0.5);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+}
+
+.memora-recorder-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  color: #1c1512;
+  background: #f6efe8;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-soft),
+    transform var(--dur-quick) var(--ease-lift);
+}
+
+.memora-recorder-button:hover {
+  transform: scale(1.08);
+}
+
+.memora-recorder-button.is-live {
+  color: #fff;
+  background: #d0584f;
+}
+
+.memora-recorder-button:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 2px;
+}
+
+.memora-recorder-button svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: currentColor;
+}
+
+@keyframes memora-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — hand-drawn vector accents
+   Inline <svg> accents live in the background space of a surface. They
+   inherit `color` from the container and are always non-interactive.
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-doodles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  color: var(--doodle-sienna);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.memora-doodles-sky {
+  color: var(--doodle-sky);
+}
+
+.memora-doodles-leaf {
+  color: var(--doodle-leaf);
+}
+
+.memora-doodles-honey {
+  color: var(--doodle-honey);
+}
+
+.memora-doodles-faint {
+  opacity: 0.28;
+}
+
+.memora-doodle {
+  position: absolute;
+  display: block;
+}
+
+.memora-doodle-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.memora-doodle-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.memora-doodle-stroke-thin {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.memora-doodle-fill {
+  fill: currentColor;
+  opacity: 0.16;
+}
+
+.memora-doodle-fill-strong {
+  fill: currentColor;
+  opacity: 0.32;
+}
+
+.memora-doodle-size-sm {
+  width: 4rem;
+  height: 4rem;
+}
+.memora-doodle-size-md {
+  width: 6.5rem;
+  height: 6.5rem;
+}
+.memora-doodle-size-lg {
+  width: 10rem;
+  height: 10rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — motion language
+   Raw CSS transitions & keyframes only. Reveal is opt-in per element via
+   .memora-reveal, and is gated behind .memora-reveal-ready (set by
+   core/reveal.js) so content is never trapped at opacity 0 if the
+   observer never runs.
+   ═══════════════════════════════════════════════════════════════════════ */
+.memora-reveal-ready .memora-reveal {
+  opacity: 0;
+  transform: translate3d(0, 1.4rem, 0);
+  transition:
+    opacity var(--dur-slow) var(--ease-soft) var(--memora-reveal-delay, 0ms),
+    transform var(--dur-slow) var(--ease-lift) var(--memora-reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.memora-reveal-ready .memora-reveal-drift {
+  transform: translate3d(-1.5rem, 0, 0);
+}
+
+.memora-reveal-ready .memora-reveal.is-revealed {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+@keyframes memora-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--memora-tilt, 0deg));
+  }
+  50% {
+    transform: translate3d(0, -0.6rem, 0)
+      rotate(calc(var(--memora-tilt, 0deg) + 1.6deg));
+  }
+}
+
+@keyframes memora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(0.55rem, -0.4rem, 0);
+  }
+  66% {
+    transform: translate3d(-0.4rem, 0.35rem, 0);
+  }
+}
+
+@keyframes memora-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes memora-nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.memora-float {
+  animation: memora-float 7.5s var(--ease-soft) infinite;
+}
+
+.memora-drift {
+  animation: memora-drift 14s ease-in-out infinite;
+}
+
+.memora-nudge {
+  animation: memora-nudge 4.5s var(--ease-soft) infinite;
+}
+
+.memora-draw-rule {
+  transform-origin: left center;
+  animation: memora-draw 1.2s var(--ease-soft) both;
+}
+
+/* Landing hero entrance — a single composed sequence, no JS timing.
+   The resting state is the *visible* one; `both` fill pulls the hidden start
+   state in only while the animation is actually running. If animations are
+   suppressed for any reason the hero simply appears, rather than being
+   stranded at opacity 0. */
+.memora-enter {
+  opacity: 1;
+  transform: none;
+  animation: memora-enter 900ms var(--ease-lift) var(--memora-reveal-delay, 0ms)
+    both;
+}
+
+@keyframes memora-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1.6rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memora-modal-scrim,
+  .memora-modal {
+    animation: none;
+  }
+  .memora-reveal-ready .memora-reveal,
+  .memora-reveal-ready .memora-reveal-drift {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .memora-enter {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .memora-float,
+  .memora-drift,
+  .memora-nudge {
+    animation: none;
+  }
+  .memora-draw-rule {
+    animation: none;
+  }
+  /* The "Uploading…" label beside it still carries the state, so the spinner
+     itself can stand still. */
+  .memora-avatar-spinner {
+    animation: none;
+    border-top-color: color-mix(in srgb, var(--accent-sienna) 28%, transparent);
+  }
+  /* A "recording" light that never pulses still reads as recording. */
+  .memora-recorder-dot.is-live {
+    animation: none;
+  }
+  .memora-lightbox {
+    animation: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Memora — landing page motion passes
+   Builds on the existing .memora-landing rules above; nothing there is
+   removed, only staggered entrances and drifting accents are layered in.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* Sections become doodle hosts for their background space. The hero is
+   already position: relative; the rest opt in here. */
+.memora-belief-band,
+.memora-quote-section,
+.memora-final-cta {
+  position: relative;
+  isolation: isolate;
+}
+
+.memora-hero {
+  position: relative;
+}
+
+.memora-hero-art {
+  isolation: isolate;
+}
+
+.memora-photo {
+  animation: memora-float 9s var(--ease-soft) infinite;
+  animation-delay: -2s;
+}
+
+.memora-photo-back {
+  animation-delay: -1s;
+}
+
+.memora-note {
+  animation: memora-float 6.5s var(--ease-soft) infinite;
+}
+
+.memora-note-two {
+  animation-delay: -3.2s;
+}
+
+.memora-flow-item {
+  transition:
+    background-color var(--dur-base) var(--ease-soft),
+    transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-flow-item:hover {
+  transform: translateY(-3px);
+}
+
+.memora-flow-item > svg {
+  transition: transform var(--dur-base) var(--ease-lift);
+}
+
+.memora-flow-item:hover > svg {
+  transform: rotate(-8deg) scale(1.12);
+}
+
+.memora-quote-section blockquote {
+  position: relative;
+}
+
+.memora-quote-mark {
+  display: block;
+  width: 2.75rem;
+  height: 2.25rem;
+  margin: 0 auto 1.5rem;
+  color: var(--accent-sienna);
+  opacity: 0.75;
+}
+
+.memora-final-cta .memora-primary-action {
+  margin-top: 1.75rem;
+}
+
+@media (max-width: 800px) {
+  .memora-dash-header,
+  .memora-album-head {
+    margin-bottom: 1.75rem;
+  }
+  .memora-album-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .memora-nav {
+    padding: 0.55rem 0.9rem;
+  }
+  .memora-nav-actions {
+    gap: 0.25rem;
+  }
+  .memora-pill {
+    padding-inline: 0.65rem;
+  }
+  .memora-identity-link span {
+    display: none;
+  }
+  .memora-profile-id {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .memora-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .memora-lightbox-panel {
+    padding: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .memora-stats {
+    grid-template-columns: 1fr;
+  }
+  .memora-wordmark {
+    font-size: 1.15rem;
   }
 }

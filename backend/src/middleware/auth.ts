@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
+import { isServerless } from "../lib/env.js";
 
 /**
  * Resolve the token-signing secret.
@@ -9,13 +10,16 @@ import type { Request, Response, NextFunction } from "express";
  * string could mint a token for any user. Local development keeps the old
  * fallback so `npm run dev` works out of the box; a deployed build fails loudly
  * and immediately instead of silently serving forgeable tokens.
+ *
+ * `isServerless` is checked alongside NODE_ENV so the guarantee holds even if a
+ * deployed instance is misconfigured with NODE_ENV=development.
  */
 function resolveJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
 
   if (secret) return secret;
 
-  if (process.env.NODE_ENV === "production") {
+  if (isServerless || process.env.NODE_ENV === "production") {
     throw new Error(
       "JWT_SECRET is required in production. Generate one with: " +
         'node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"',

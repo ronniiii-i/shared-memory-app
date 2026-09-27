@@ -10,6 +10,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 // ── Import middleware ──
 import { parseAuthHeader } from "./middleware/auth.js";
+import { isServerless } from "./lib/env.js";
 
 // ── Import routes ──
 import uploadRoutes from "./routes/upload.js";
@@ -92,10 +93,10 @@ app.use(
 // Start Server
 // ═══════════════════════════════════════════════════════════════
 
-const isServerless = Boolean(
-  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
-);
-
+// Serverless hosts (Vercel functions, Lambda) import this module and invoke the
+// exported Express app directly — they hand us the request, we never pick a
+// port. Binding one there is dead weight, and `PORT` collides with the host's
+// own value, so skip it entirely.
 if (!isServerless) {
   app.listen(PORT, () => {
     console.log("");

@@ -92,10 +92,6 @@ app.use(
 // Start Server
 // ═══════════════════════════════════════════════════════════════
 
-// Serverless hosts (Vercel functions, Lambda) import this module and invoke the
-// exported Express app directly — they hand us the request, we never pick a
-// port. Binding one there is dead weight, and `PORT` collides with the host's
-// own value, so skip it entirely.
 const isServerless = Boolean(
   process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
 );

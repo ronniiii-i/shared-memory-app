@@ -1,7 +1,9 @@
 import { UIComponent } from '../core/UIComponent.js';
 import { store } from '../core/Store.js';
 import { api } from '../services/api.js';
+import { normalizeShareCode, suggestShareCode, validateShareCode } from '../services/shareCode.js';
 import { toast } from './Toast.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class AlbumList extends UIComponent {
   constructor(props) {
@@ -10,6 +12,23 @@ export class AlbumList extends UIComponent {
     this.isCreating = false;
     this._fetched = false;
     this.isLoading = true;
+
+    // 'create' | 'join' | null — which sheet, if any, is open
+    this.sheet = null;
+    this.createCode = suggestShareCode();
+    this.createCodeError = '';
+    // The sheets re-render wholesale, so every field they hold is mirrored in
+    // state. Without this, a re-render (a taken code, a "Finding it…" spinner)
+    // would silently wipe whatever the person had typed.
+    this.createTitle = '';
+    this.createDesc = '';
+    this.createPass = '';
+    this.joinInput = '';
+    this.joinPass = '';
+    this.joinError = '';
+    this.joinNeedsPasscode = false;
+    this.joinAlbumTitle = '';
+    this.isJoining = false;
   }
 
   onUnmount() {
@@ -29,16 +48,99 @@ export class AlbumList extends UIComponent {
         document.dispatchEvent(new CustomEvent('open-custom-auth', { detail: { tab: 'register' } }));
         return;
       }
-      this.isCreating = true;
+      this.sheet = 'create';
+      this.createCode = suggestShareCode();
+      this.createCodeError = '';
+      this.createTitle = '';
+      this.createDesc = '';
+      this.createPass = '';
       this.update();
     });
 
-    this.delegate('click', '.btn-cancel-create', () => {
-      this.isCreating = false;
+    this.delegate('click', '.btn-open-join-modal', () => {
+      if (!store.currentUser) {
+        document.dispatchEvent(new CustomEvent('open-custom-auth', { detail: { tab: 'login' } }));
+        return;
+      }
+      this.sheet = 'join';
+      this.joinInput = '';
+      this.joinPass = '';
+      this.joinError = '';
+      this.joinNeedsPasscode = false;
+      this.joinAlbumTitle = '';
+      this.update();
+    });
+
+    this.delegate('click', '.btn-close-sheet', () => this.closeSheet());
+
+    // Live-preview the code as it is typed, and complain early if unusable.
+    // The hint is patched in place rather than re-rendered, so typing does not
+    // steal focus or reset the caret.
+    this.delegate('input', '#album-code-input', (e, target) => {
+      this.createCode = target.value;
+      this.createCodeError = '';
+      this.paintCodeHint();
+    });
+
+    this.delegate('input', '#album-title-input', (e, target) => {
+      this.createTitle = target.value;
+    });
+
+    this.delegate('input', '#album-desc-input', (e, target) => {
+      this.createDesc = target.value;
+    });
+
+    this.delegate('input', '#album-pass-input', (e, target) => {
+      this.createPass = target.value;
+    });
+
+    this.delegate('input', '#join-code-input', (e, target) => {
+      this.joinInput = target.value;
+      this.joinError = '';
+    });
+
+    this.delegate('input', '#join-pass-input', (e, target) => {
+      this.joinPass = target.value;
+    });
+
+    this.delegate('click', '.btn-roll-code', () => {
+      this.createCode = suggestShareCode();
+      this.createCodeError = '';
       this.update();
     });
 
     this.delegate('submit', '#create-album-form', (e) => this.handleCreateAlbum(e));
+    this.delegate('submit', '#join-album-form', (e) => this.handleJoinAlbum(e));
+  }
+
+  closeSheet() {
+    this.sheet = null;
+    this.isJoining = false;
+    this.update();
+  }
+
+  /**
+   * What the code will be stored as, and whatever is wrong with it so far.
+   * The server stays the authority on uniqueness — that is the one thing we
+   * cannot know from here — but length and reserved words are checkable now.
+   */
+  codeHint() {
+    const preview = normalizeShareCode(this.createCode);
+    const localIssue = preview ? validateShareCode(this.createCode).error : '';
+    return { preview, message: this.createCodeError || localIssue };
+  }
+
+  /** Repaint only the hint line, so typing does not re-render the whole sheet. */
+  paintCodeHint() {
+    const hint = this.$('#album-code-hint');
+    const input = this.$('#album-code-input');
+    if (!hint || !input) return;
+
+    const { preview, message } = this.codeHint();
+    hint.innerHTML = message
+      ? `<span class="memora-form-error" role="alert">${message}</span>`
+      : `Stored as <span class="memora-code">${preview || '—'}</span> — unique across every album.`;
+    input.classList.toggle('memora-control-invalid', Boolean(message));
   }
 
   async fetchAlbums() {
@@ -56,141 +158,332 @@ export class AlbumList extends UIComponent {
 
   async handleCreateAlbum(e) {
     e.preventDefault();
-    const titleInput = this.$('#album-title-input');
-    const descInput = this.$('#album-desc-input');
-    const passInput = this.$('#album-pass-input');
 
-    if (!titleInput || !titleInput.value.trim()) return;
+    if (!this.createTitle.trim()) return;
+
+    const code = normalizeShareCode(this.createCode);
+
+    // Length and reserved words are settled without a round trip.
+    const checked = validateShareCode(this.createCode);
+    if (checked.error) {
+      this.createCodeError = checked.error;
+      this.paintCodeHint();
+      return;
+    }
 
     try {
       const newAlbum = await api.post('/albums', {
-        title: titleInput.value.trim(),
-        description: descInput ? descInput.value.trim() : null,
-        passcode: passInput ? passInput.value.trim() : null,
+        title: this.createTitle.trim(),
+        description: this.createDesc.trim() || null,
+        passcode: this.createPass.trim() || null,
+        shareCode: code || undefined,
       });
 
-      this.isCreating = false;
+      this.sheet = null;
       window.location.hash = `#/album/${newAlbum.id}`;
     } catch (err) {
+      // A taken code is the one failure worth keeping the sheet open for.
+      // Every field is already mirrored in state, so the re-render puts the
+      // person's work back exactly as they left it.
+      if (err.status === 409 || err.status === 400) {
+        this.createCodeError = err.message;
+        this.update();
+        return;
+      }
       toast.error(`Failed to create album: ${err.message}`);
     }
+  }
+
+  /**
+   * Join by code in one step: look the album up first so we can show its
+   * title (and ask for a passcode only if one is actually set), then join.
+   */
+  async handleJoinAlbum(e) {
+    e.preventDefault();
+
+    // `normalizeShareCode` also digs a code out of a pasted invite link, so
+    // this covers "type the code" and "paste the whole link" in one step.
+    const code = normalizeShareCode(this.joinInput);
+    if (!code) {
+      this.joinError = 'Enter the code from your invite.';
+      this.update();
+      return;
+    }
+
+    const passcode = this.joinPass || undefined;
+    this.isJoining = true;
+    this.joinError = '';
+    this.update();
+
+    try {
+      const info = await api.get(`/albums/join/${encodeURIComponent(code)}`);
+
+      if (info.requiresPasscode && !this.joinNeedsPasscode) {
+        // First sighting of a protected album: reveal the passcode field and
+        // wait, rather than bouncing to a separate page.
+        this.joinNeedsPasscode = true;
+        this.joinAlbumTitle = info.title;
+        this.isJoining = false;
+        this.update();
+        return;
+      }
+
+      const res = await api.post(`/albums/join/${encodeURIComponent(code)}`, { passcode });
+
+      this.sheet = null;
+      window.location.hash = `#/album/${res.albumId}`;
+    } catch (err) {
+      this.isJoining = false;
+      this.joinError = err.message;
+      this.update();
+    }
+  }
+
+  renderCreateModal() {
+    const { preview, message: codeHint } = this.codeHint();
+
+    return `
+      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" class="fixed inset-0 z-[9000] memora-modal-scrim">
+        <div class="memora-modal memora-sheet memora-reveal is-revealed">
+          <div class="memora-modal-head">
+            <div>
+              <p class="memora-kicker">A new memory</p>
+              <h2 id="modal-title" class="memora-modal-title">Name the album</h2>
+              <p class="memora-sheet-copy">Give it something you'll recognise in a year's time.</p>
+            </div>
+            <button type="button" class="btn-close-sheet memora-pill memora-pill-quiet" aria-label="Close">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <form id="create-album-form" class="memora-form">
+            <div>
+              <label for="album-title-input" class="memora-label">Album title</label>
+              <input type="text" id="album-title-input" value="${this.createTitle}" required placeholder="e.g. Summer Road Trip '26" class="memora-control" />
+            </div>
+
+            <div>
+              <label for="album-desc-input" class="memora-label">A line about it <span class="memora-label memora-label-quiet">optional</span></label>
+              <input type="text" id="album-desc-input" value="${this.createDesc}" placeholder="e.g. Good food, beach days, and sunsets" class="memora-control" />
+            </div>
+
+            <div>
+              <label for="album-code-input" class="memora-label">
+                Share code
+                <span class="memora-label memora-label-quiet">friends type this to join</span>
+              </label>
+              <div class="memora-code-field">
+                <input
+                  type="text"
+                  id="album-code-input"
+                  value="${this.createCode}"
+                  spellcheck="false"
+                  autocapitalize="characters"
+                  autocomplete="off"
+                  maxlength="24"
+                  aria-describedby="album-code-hint"
+                  class="memora-control memora-control-mono memora-code-input${codeHint ? ' memora-control-invalid' : ''}"
+                />
+                <button type="button" class="btn-roll-code memora-pill memora-pill-quiet" aria-label="Suggest a different code">
+                  <i data-lucide="refresh-cw" aria-hidden="true"></i>
+                </button>
+              </div>
+              <p id="album-code-hint" class="memora-field-hint">
+                ${
+                  codeHint
+                    ? `<span class="memora-form-error" role="alert">${codeHint}</span>`
+                    : `Stored as <span class="memora-code">${preview}</span> — unique across every album.`
+                }
+              </p>
+            </div>
+
+            <div>
+              <label for="album-pass-input" class="memora-label">A passcode, if it's just for friends <span class="memora-label memora-label-quiet">optional</span></label>
+              <input type="text" id="album-pass-input" value="${this.createPass}" placeholder="e.g. vibe2026" class="memora-control memora-control-mono" />
+            </div>
+
+            <div class="memora-form-actions memora-modal-actions">
+              <button type="button" class="btn-close-sheet memora-pill">Not yet</button>
+              <button type="submit" class="memora-button memora-button-block memora-button-inline">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                <span>Start the album</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  renderJoinModal() {
+    return `
+      <div role="dialog" aria-modal="true" aria-labelledby="join-modal-title" class="fixed inset-0 z-[9000] memora-modal-scrim">
+        <div class="memora-modal memora-sheet memora-reveal is-revealed">
+          <div class="memora-modal-head">
+            <div>
+              <p class="memora-kicker">You were invited</p>
+              <h2 id="join-modal-title" class="memora-modal-title">Join an album</h2>
+              <p class="memora-sheet-copy">Type the code you were sent, or paste the whole invite link.</p>
+            </div>
+            <button type="button" class="btn-close-sheet memora-pill memora-pill-quiet" aria-label="Close">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <form id="join-album-form" class="memora-form">
+            <div>
+              <label for="join-code-input" class="memora-label">Album code</label>
+              <input
+                type="text"
+                id="join-code-input"
+                value="${this.joinInput}"
+                placeholder="e.g. SUMMER26"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="characters"
+                aria-describedby="join-code-hint"
+                class="memora-control memora-control-mono memora-code-input${this.joinError ? ' memora-control-invalid' : ''}"
+              />
+              <p id="join-code-hint" class="memora-field-hint">
+                ${
+                  this.joinError
+                    ? `<span class="memora-form-error" role="alert">${this.joinError}</span>`
+                    : 'Letters and numbers. We will find the album for you.'
+                }
+              </p>
+            </div>
+
+            ${
+              this.joinNeedsPasscode
+                ? `
+              <div>
+                <label for="join-pass-input" class="memora-label">
+                  Passcode for “${this.joinAlbumTitle}”
+                </label>
+                <input type="password" id="join-pass-input" value="${this.joinPass}" placeholder="The passcode you were given" class="memora-control memora-control-mono" />
+              </div>
+            `
+                : ''
+            }
+
+            <div class="memora-form-actions memora-modal-actions">
+              <button type="button" class="btn-close-sheet memora-pill">Cancel</button>
+              <button type="submit" class="memora-button memora-button-block memora-button-inline">
+                <i data-lucide="folder-plus" aria-hidden="true"></i>
+                <span>${this.isJoining ? 'Finding it…' : this.joinNeedsPasscode ? 'Join the album' : 'Find the album'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  renderAlbumCard(album, index) {
+    return `
+      <a
+        href="#/album/${album.id}"
+        class="memora-album-card memora-reveal"
+        style="--memora-reveal-delay: ${60 + index * 70}ms"
+        aria-label="Open album ${album.title}"
+      >
+        <div>
+          <div class="memora-album-top">
+            <h3 class="memora-album-title">${album.title}</h3>
+            <span class="memora-album-role">${album.role === 'admin' ? 'Yours' : 'Shared with you'}</span>
+          </div>
+          ${
+            album.description
+              ? `<p class="memora-album-desc memora-album-clamp">${album.description}</p>`
+              : `<p class="memora-album-desc memora-album-clamp">No description yet — the photographs will tell the story.</p>`
+          }
+        </div>
+
+        <div class="memora-album-meta">
+          <span class="memora-album-date">
+            <i data-lucide="calendar" aria-hidden="true"></i>
+            <span>${new Date(album.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+          </span>
+          <span class="memora-album-cta">
+            <span>Open</span>
+            <i data-lucide="arrow-right" aria-hidden="true"></i>
+          </span>
+        </div>
+      </a>
+    `;
   }
 
   render() {
     if (this.isLoading) {
       return `
-        <div class="flex items-center justify-center min-h-[70vh]">
-          <div class="loader-spinner">
+        <div class="memora-page memora-wash">
+          <div class="loader-spinner" style="margin: 6rem auto;">
             <div class="spinner-ring"></div>
           </div>
         </div>
       `;
     }
 
+    const hasAlbums = this.albums.length > 0;
+
     return `
-      <div class="memora-dashboard max-w-6xl mx-auto px-6 py-12">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10">
-          <div>
+      <div class="memora-dashboard memora-wash">
+        ${doodleLayer(
+          [
+            [doodle.leafSprig, { className: 'memora-doodle memora-doodle-size-lg memora-drift', style: 'top: 1.5rem; right: 3%;' }],
+            [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'top: 46%; left: -1.5rem; --memora-tilt: -6deg;' }],
+            [doodle.paperCorner, { className: 'memora-doodle memora-doodle-size-sm memora-float', style: 'bottom: -1rem; right: 12%;' }],
+          ],
+          'memora-doodles-leaf memora-doodles-faint'
+        )}
+
+        <header class="memora-dash-header">
+          <div class="memora-reveal">
             <p class="memora-eyebrow">Your memory shelf</p>
-            <h1 class="font-serif-heading text-4xl font-bold text-heading tracking-tight">A place for your people.</h1>
-            <p class="text-xs sm:text-sm text-muted mt-2">Keep the albums, inside jokes, and little stories you do not want to lose.</p>
+            <h1 class="memora-dash-title">A place for your people.</h1>
+            <p class="memora-dash-copy">Keep the albums, inside jokes, and little stories you do not want to lose.</p>
           </div>
 
-          <button class="btn-open-create-modal px-6 py-3 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer transition-all hover:scale-[1.02] flex items-center gap-2" aria-label="Create new album">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-            <span>Make a new memory</span>
-          </button>
-        </div>
-
-        <!-- Create Album Modal -->
-        ${this.isCreating ? `
-          <div role="dialog" aria-modal="true" aria-labelledby="modal-title" class="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="editorial-card p-8 rounded-3xl border border-[var(--border-color)] shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-150">
-              <div class="flex items-center justify-between mb-6">
-                <h2 id="modal-title" class="font-serif-heading text-2xl font-bold text-heading flex items-center gap-2">
-                  <i data-lucide="folder" class="w-5 h-5 text-[var(--accent-sienna)]"></i>
-                  <span>New Shared Album</span>
-                </h2>
-                <button type="button" class="btn-cancel-create p-2 text-muted hover:text-heading rounded-full bg-stone-200/50 dark:bg-stone-800/50 transition-colors" aria-label="Close modal">
-                  <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
-              </div>
-
-              <form id="create-album-form" class="space-y-4">
-                <div>
-                  <label for="album-title-input" class="block text-xs font-semibold text-main mb-1.5">Album Title *</label>
-                  <input type="text" id="album-title-input" required placeholder="e.g. Summer Road Trip '26" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)] transition-all" />
-                </div>
-
-                <div>
-                  <label for="album-desc-input" class="block text-xs font-semibold text-main mb-1.5">Description (Optional)</label>
-                  <input type="text" id="album-desc-input" placeholder="e.g. Good food, beach days, and sunsets" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)] transition-all" />
-                </div>
-
-                <div>
-                  <label for="album-pass-input" class="block text-xs font-semibold text-main mb-1.5">Passcode Protection (Optional)</label>
-                  <input type="text" id="album-pass-input" placeholder="e.g. vibe2026" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)] transition-all" />
-                </div>
-
-                <div class="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border-color)]">
-                  <button type="button" class="btn-cancel-create px-4 py-2.5 bg-stone-200 dark:bg-stone-800 text-main font-semibold text-xs rounded-xl cursor-pointer transition-colors">
-                    Cancel
-                  </button>
-                  <button type="submit" class="px-5 py-2.5 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl cursor-pointer shadow transition-all hover:scale-105">
-                    Create Album
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Album Grid -->
-        ${this.albums.length === 0 ? `
-          <div class="editorial-card p-12 rounded-3xl text-center max-w-lg mx-auto my-8">
-            <div class="w-16 h-16 rounded-2xl bg-stone-200/60 dark:bg-stone-800 text-[var(--accent-sienna)] flex items-center justify-center mx-auto mb-4 border border-[var(--border-color)]">
-              <i data-lucide="folder" class="w-8 h-8"></i>
-            </div>
-            <h3 class="font-serif-heading font-bold text-xl text-heading">No albums yet</h3>
-            <p class="text-xs text-muted mt-1 mb-6">Create your first album or join a friend's album via invite code!</p>
-            <button class="btn-open-create-modal px-6 py-3 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl cursor-pointer inline-flex items-center gap-2 shadow">
-              <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>Create First Album</span>
+          <div class="memora-dash-actions memora-reveal" style="--memora-reveal-delay: 120ms">
+            <button class="btn-open-join-modal memora-button memora-button-quiet">
+              <i data-lucide="log-in" aria-hidden="true"></i>
+              <span>Join album</span>
+            </button>
+            <button class="btn-open-create-modal memora-button">
+              <i data-lucide="plus" aria-hidden="true"></i>
+              <span>Make a new memory</span>
             </button>
           </div>
-        ` : `
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            ${this.albums.map((album) => `
-              <a href="#/album/${album.id}" class="editorial-card p-6 rounded-3xl hover:border-[var(--accent-sienna)] transition-all hover:-translate-y-1 group flex flex-col justify-between" aria-label="Open album ${album.title}">
-                <div>
-                  <div class="flex items-start justify-between gap-2">
-                    <h3 class="font-serif-heading font-bold text-xl text-heading group-hover:text-[var(--accent-sienna)] transition-colors">
-                      ${album.title}
-                    </h3>
-                    <span class="px-2.5 py-0.5 rounded-full bg-stone-200/70 dark:bg-stone-800 text-muted text-[10px] font-semibold uppercase tracking-wider">
-                      ${album.role || 'member'}
-                    </span>
-                  </div>
+        </header>
 
-                  ${album.description ? `
-                    <p class="text-xs text-muted mt-2 line-clamp-2 leading-relaxed font-sans">${album.description}</p>
-                  ` : ''}
-                </div>
+        ${this.sheet === 'create' ? this.renderCreateModal() : ''}
+        ${this.sheet === 'join' ? this.renderJoinModal() : ''}
 
-                <div class="mt-8 pt-4 border-t border-[var(--border-color)] flex items-center justify-between text-xs text-muted">
-                  <span class="flex items-center gap-1 font-mono text-[11px]">
-                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-[var(--accent-sienna)]"></i>
-                    <span>${new Date(album.createdAt).toLocaleDateString()}</span>
-                  </span>
-                  <span class="text-[var(--accent-sienna)] group-hover:translate-x-1 transition-transform flex items-center gap-1 font-semibold text-xs">
-                    <span>Open album</span>
-                    <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
-                  </span>
-                </div>
-              </a>
-            `).join('')}
+        ${
+          hasAlbums
+            ? `
+          <div class="memora-album-grid">
+            ${this.albums.map((album, index) => this.renderAlbumCard(album, index)).join('')}
           </div>
-        `}
+        `
+            : `
+          <div class="memora-empty memora-reveal">
+            <div class="memora-empty-mark"><i data-lucide="folder-open" aria-hidden="true"></i></div>
+            <h3>Nothing on the shelf yet</h3>
+            <p>Start an album of your own, or enter a friend's code to add your photographs to theirs.</p>
+            <div class="memora-empty-actions">
+              <button class="btn-open-create-modal memora-button memora-empty-action">
+                <i data-lucide="plus" aria-hidden="true"></i>
+                <span>Start the first one</span>
+              </button>
+              <button class="btn-open-join-modal memora-button memora-button-quiet memora-empty-action">
+                <i data-lucide="log-in" aria-hidden="true"></i>
+                <span>Join with a code</span>
+              </button>
+            </div>
+          </div>
+        `
+        }
       </div>
     `;
   }

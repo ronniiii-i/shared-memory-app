@@ -5,10 +5,12 @@ import { PhotoUploader } from './PhotoUploader.js';
 import { GuestInvite } from './GuestInvite.js';
 import { VibeSummary } from './VibeSummary.js';
 import { api } from '../services/api.js';
+import { normalizeShareCode } from '../services/shareCode.js';
 import { subscribeToAlbum } from '../services/pusher.js';
 import { store } from '../core/Store.js';
 import { toast } from './Toast.js';
 import { confirmDialog } from './ConfirmDialog.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class ScrapbookView extends UIComponent {
   constructor(props) {
@@ -19,6 +21,12 @@ export class ScrapbookView extends UIComponent {
     this.activeTab = 'gallery';
     this.unsubscribePusher = null;
     this._fetched = false;
+
+    // Share-code editing (admin only). `codeDraft` is null until the admin
+    // starts editing, so the stored code shows untouched until then.
+    this.codeDraft = null;
+    this.codeError = '';
+    this.isSavingCode = false;
   }
 
   async onMount() {
@@ -44,6 +52,25 @@ export class ScrapbookView extends UIComponent {
     });
 
     this.delegate('click', '.btn-delete-album', () => this.deleteAlbum());
+
+    this.delegate('click', '.btn-edit-code', () => {
+      this.codeDraft = this.album.shareCode;
+      this.codeError = '';
+      this.update();
+    });
+
+    this.delegate('click', '.btn-cancel-code', () => {
+      this.codeDraft = null;
+      this.codeError = '';
+      this.update();
+    });
+
+    this.delegate('input', '#album-code-edit', (e, target) => {
+      this.codeDraft = target.value;
+      this.codeError = '';
+    });
+
+    this.delegate('submit', '#edit-code-form', (e) => this.handleSaveCode(e));
 
     this.mountTabContent();
   }
@@ -133,11 +160,105 @@ export class ScrapbookView extends UIComponent {
     }
   }
 
+  /**
+   * Change the album's share code. Every existing invite link stops working,
+   * so the UI says so plainly before the save.
+   */
+  async handleSaveCode(e) {
+    e.preventDefault();
+    if (!this.album) return;
+
+    const code = normalizeShareCode(this.codeDraft);
+
+    if (code === normalizeShareCode(this.album.shareCode)) {
+      this.codeDraft = null;
+      this.codeError = '';
+      this.update();
+      return;
+    }
+
+    this.isSavingCode = true;
+    this.codeError = '';
+    this.update();
+
+    try {
+      const updated = await api.patch(`/albums/${this.album.id}`, { shareCode: code });
+      this.album = { ...this.album, shareCode: updated.shareCode };
+      this.codeDraft = null;
+      toast.success('Share code updated.');
+    } catch (err) {
+      // 400 = unusable code, 409 = taken. Both keep the editor open.
+      this.codeError = err.message;
+    } finally {
+      this.isSavingCode = false;
+      this.update();
+    }
+  }
+
+  renderShareCodeControl() {
+    const stored = this.album.shareCode;
+    const editing = this.codeDraft !== null;
+    const preview = normalizeShareCode(this.codeDraft);
+
+    if (!editing) {
+      return `
+        <div class="memora-code-row">
+          <div>
+            <p class="memora-kicker">Share code</p>
+            <p class="memora-code memora-code-lg">${stored}</p>
+            <p class="memora-field-hint">
+              Friends join with this code or the invite link. Unique across every album.
+            </p>
+          </div>
+          <button type="button" class="btn-edit-code memora-pill">
+            <i data-lucide="pencil" aria-hidden="true"></i>
+            <span>Change</span>
+          </button>
+        </div>
+      `;
+    }
+
+    return `
+      <form id="edit-code-form" class="memora-code-row">
+        <div>
+          <label for="album-code-edit" class="memora-kicker">Share code</label>
+          <div class="memora-code-field">
+            <input
+              type="text"
+              id="album-code-edit"
+              value="${this.codeDraft}"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="characters"
+              maxlength="24"
+              aria-describedby="album-code-edit-hint"
+              class="memora-control memora-control-mono memora-code-input${this.codeError ? ' memora-control-invalid' : ''}"
+            />
+          </div>
+          <p id="album-code-edit-hint" class="memora-field-hint">
+            ${
+              this.codeError
+                ? `<span class="memora-form-error" role="alert">${this.codeError}</span>`
+                : `Saves as <span class="memora-code">${preview || '—'}</span>. <strong>Existing invite links will stop working.</strong>`
+            }
+          </p>
+        </div>
+        <div class="memora-code-row-actions">
+          <button type="button" class="btn-cancel-code memora-pill memora-pill-quiet">Cancel</button>
+          <button type="submit" class="memora-button memora-button-inline" ${this.isSavingCode ? 'disabled' : ''}>
+            <i data-lucide="check" aria-hidden="true"></i>
+            <span>${this.isSavingCode ? 'Saving…' : 'Save code'}</span>
+          </button>
+        </div>
+      </form>
+    `;
+  }
+
   render() {
     if (!this.album) {
       return `
-        <div class="flex items-center justify-center min-h-[70vh]">
-          <div class="loader-spinner">
+        <div class="memora-page memora-wash">
+          <div class="loader-spinner" style="margin: 6rem auto;">
             <div class="spinner-ring"></div>
           </div>
         </div>
@@ -145,59 +266,61 @@ export class ScrapbookView extends UIComponent {
     }
 
     const isAdmin = this.album.currentUserRole === 'admin';
+    const roleLabel =
+      this.album.currentUserRole === 'admin' ? 'You keep this one' : 'Shared with you';
+
+    const tab = (name, icon, label) => `
+      <button
+        data-tab="${name}"
+        role="tab"
+        aria-selected="${this.activeTab === name}"
+        class="btn-tab memora-tab"
+      >
+        <i data-lucide="${icon}" aria-hidden="true"></i>
+        <span>${label}</span>
+      </button>
+    `;
 
     return `
-      <div class="max-w-7xl mx-auto px-6 py-8">
-        <!-- Album Header -->
-        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-8">
-          <div>
-            <div class="flex items-center gap-3">
-              <a href="#/" class="text-xs text-[var(--accent-sienna)] hover:underline flex items-center gap-1 font-semibold" aria-label="Back to all albums">
-                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-                <span>All Albums</span>
+      <div class="memora-page memora-wash">
+        ${doodleLayer(
+          [
+            [doodle.cameraDoodle, { className: 'memora-doodle memora-doodle-size-lg memora-drift', style: 'top: 0.5rem; right: 2%;' }],
+            [doodle.wave, { className: 'memora-doodle memora-doodle-size-lg', style: 'bottom: 4rem; left: -4rem; --memora-tilt: -3deg;' }],
+          ],
+          'memora-doodles-faint'
+        )}
+
+        <div class="memora-album-head">
+          <div class="memora-reveal">
+            <div class="memora-crumbs">
+              <a href="#/" class="memora-crumb-back" aria-label="Back to all albums">
+                <i data-lucide="arrow-left" aria-hidden="true"></i>
+                <span>All albums</span>
               </a>
-              <span class="text-xs text-muted">•</span>
-              <span class="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-stone-200/60 dark:bg-stone-800 text-muted border border-[var(--border-color)]">
-                ${this.album.currentUserRole}
-              </span>
+              <span class="memora-album-role">${roleLabel}</span>
             </div>
-            <h1 class="font-serif-heading text-3xl sm:text-4xl font-bold text-heading mt-2">${this.album.title}</h1>
-            ${this.album.description ? `<p class="text-xs text-muted mt-1 font-sans leading-relaxed">${this.album.description}</p>` : ''}
+            <h1>${this.album.title}</h1>
+            ${
+              this.album.description
+                ? `<p class="memora-album-head-copy">${this.album.description}</p>`
+                : ''
+            }
           </div>
 
           <!-- Tab Navigation -->
-          <div class="flex items-center gap-2 editorial-card p-1.5 rounded-2xl" role="tablist">
-            <button data-tab="gallery" role="tab" aria-selected="${this.activeTab === 'gallery'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'gallery' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-              <i data-lucide="grid" class="w-4 h-4"></i>
-              <span>Gallery</span>
-            </button>
-            <button data-tab="canvas" role="tab" aria-selected="${this.activeTab === 'canvas'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'canvas' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-              <i data-lucide="image" class="w-4 h-4"></i>
-              <span>Canvas</span>
-            </button>
-            <button data-tab="upload" role="tab" aria-selected="${this.activeTab === 'upload'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'upload' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-              <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>Add Photos</span>
-            </button>
-            <button data-tab="invite" role="tab" aria-selected="${this.activeTab === 'invite'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'invite' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-              <i data-lucide="share-2" class="w-4 h-4"></i>
-              <span>Invite</span>
-            </button>
-            <button data-tab="vibe" role="tab" aria-selected="${this.activeTab === 'vibe'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'vibe' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-              <i data-lucide="sparkles" class="w-4 h-4"></i>
-              <span>Recap</span>
-            </button>
-            ${isAdmin ? `
-              <button data-tab="settings" role="tab" aria-selected="${this.activeTab === 'settings'}" class="btn-tab px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${this.activeTab === 'settings' ? 'bg-[var(--accent-sienna)] text-white shadow' : 'text-muted hover:text-heading'}">
-                <i data-lucide="settings" class="w-4 h-4"></i>
-                <span>Settings</span>
-              </button>
-            ` : ''}
+          <div class="memora-tabset" role="tablist" aria-label="Album sections">
+            ${tab('gallery', 'grid', 'Gallery')}
+            ${tab('canvas', 'image', 'Canvas')}
+            ${tab('upload', 'plus', 'Add photos')}
+            ${tab('invite', 'share-2', 'Invite')}
+            ${tab('vibe', 'sparkles', 'Recap')}
+            ${isAdmin ? tab('settings', 'settings', 'Settings') : ''}
           </div>
         </div>
 
         <!-- Tab Body Content -->
-        <div id="tab-content" class="mt-4" role="tabpanel">
+        <div id="tab-content" role="tabpanel">
           ${this.activeTab === 'gallery' ? `
             <div id="gallery-container"></div>
           ` : ''}
@@ -219,61 +342,79 @@ export class ScrapbookView extends UIComponent {
           ` : ''}
 
           ${this.activeTab === 'settings' && isAdmin ? `
-            <div class="space-y-6 max-w-3xl mx-auto">
+            <div class="memora-settings">
               <!-- Admin Header & Danger Zone -->
-              <div class="editorial-card p-6 rounded-3xl flex items-center justify-between">
+              <div class="memora-sheet memora-settings-head">
                 <div>
-                  <h3 class="font-serif-heading text-lg font-bold text-heading">Album Management</h3>
-                  <p class="text-xs text-muted mt-0.5">Share code: <span class="font-mono text-[var(--accent-sienna)] font-semibold">${this.album.shareCode}</span></p>
+                  <p class="memora-kicker">Album management</p>
+                  <h3 class="memora-sheet-title">Looking after this album</h3>
+                  <p class="memora-sheet-copy">Invite people, change the code, or clear it out.</p>
                 </div>
-                <button class="btn-delete-album px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl cursor-pointer shadow flex items-center gap-1.5">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                  <span>Delete Album</span>
+                <button class="btn-delete-album memora-button memora-button-danger">
+                  <i data-lucide="trash-2" aria-hidden="true"></i>
+                  <span>Delete album</span>
                 </button>
               </div>
 
+              <!-- Share Code -->
+              <div class="memora-sheet">
+                ${this.renderShareCodeControl()}
+              </div>
+
               <!-- Members Moderation -->
-              <div class="editorial-card p-6 rounded-3xl">
-                <h3 class="font-serif-heading text-base font-bold text-heading mb-4 flex items-center gap-2">
-                  <i data-lucide="users" class="w-4 h-4 text-[var(--accent-sienna)]"></i>
-                  <span>Album Members (${this.album.members?.length || 0})</span>
+              <div class="memora-sheet">
+                <h3 class="memora-sheet-title">
+                  <i data-lucide="users" aria-hidden="true"></i>
+                  <span>Album members (${this.album.members?.length || 0})</span>
                 </h3>
 
-                <div class="divide-y divide-[var(--border-color)]">
+                <div class="memora-roster">
                   ${(this.album.members || []).map((m) => `
-                    <div class="py-3 flex items-center justify-between text-xs">
-                      <div class="flex items-center gap-3">
-                        <img src="${m.user?.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + m.user?.username}" class="w-8 h-8 rounded-full border border-[var(--border-color)] bg-stone-100" />
+                    <div class="memora-roster-row">
+                      <div class="memora-roster-id">
+                        <img
+                          class="memora-roster-avatar"
+                          src="${m.user?.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + (m.user?.username || m.userId)}"
+                          alt=""
+                        />
                         <div>
-                          <span class="font-semibold text-main">@${m.user?.username || m.userId}</span>
-                          <span class="ml-2 px-2 py-0.5 rounded bg-stone-200 dark:bg-stone-800 text-[10px] uppercase font-bold text-muted">${m.role}</span>
+                          <span class="memora-roster-name">@${m.user?.username || m.userId}</span>
+                          <span class="memora-roster-role">${m.role}</span>
                         </div>
                       </div>
 
-                      ${m.role !== 'admin' ? `
-                        <button data-member-id="${m.userId}" class="btn-remove-member px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold rounded-xl cursor-pointer transition-colors flex items-center gap-1">
-                          <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
-                          <span>Revoke Access</span>
+                      ${
+                        m.role !== 'admin'
+                          ? `
+                        <button data-member-id="${m.userId}" class="btn-remove-member memora-pill memora-pill-danger">
+                          <i data-lucide="user-x" aria-hidden="true"></i>
+                          <span>Revoke access</span>
                         </button>
-                      ` : '<span class="text-muted italic text-[11px]">Owner</span>'}
+                      `
+                          : '<span class="memora-roster-owner">Owner</span>'
+                      }
                     </div>
                   `).join('')}
                 </div>
               </div>
 
               <!-- Photos Moderation -->
-              <div class="editorial-card p-6 rounded-3xl">
-                <h3 class="font-serif-heading text-base font-bold text-heading mb-4 flex items-center gap-2">
-                  <i data-lucide="image" class="w-4 h-4 text-[var(--accent-sienna)]"></i>
-                  <span>Photos Moderation (${this.photos.length})</span>
+              <div class="memora-sheet">
+                <h3 class="memora-sheet-title">
+                  <i data-lucide="image" aria-hidden="true"></i>
+                  <span>Photos in this album (${this.photos.length})</span>
                 </h3>
 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="memora-moderation-grid">
                   ${this.photos.map((p) => `
-                    <div class="relative group rounded-xl overflow-hidden border border-[var(--border-color)]">
-                      <img src="${p.r2Url}" class="w-full h-32 object-cover" />
-                      <button data-photo-id="${p.id}" class="btn-delete-photo-admin absolute inset-0 bg-red-950/80 text-white font-bold text-xs opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer gap-1.5">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <div class="memora-moderation-cell">
+                      <img src="${p.r2Url}" alt="${p.caption || 'Album photo'}" loading="lazy" />
+                      <button
+                        data-photo-id="${p.id}"
+                        class="btn-delete-photo-admin memora-moderation-hit"
+                        aria-label="Remove photo"
+                      >
+                        <i data-lucide="trash-2" aria-hidden="true"></i>
                         <span>Remove</span>
                       </button>
                     </div>

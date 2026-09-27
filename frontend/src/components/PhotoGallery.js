@@ -386,7 +386,7 @@ export class PhotoGallery extends UIComponent {
     const people = this.contributors();
 
     return `
-      <section class="memora-contact-sheet memora-sheet memora-doodle-host" aria-label="Album photographs">
+      <section class="memora-gallery memora-sheet memora-doodle-host" aria-label="Album photographs">
         ${doodleLayer(
           [
             [
@@ -409,7 +409,7 @@ export class PhotoGallery extends UIComponent {
 
         <header class="memora-sheet-head">
           <div class="memora-sheet-head-copy">
-            <p class="memora-kicker">Contact sheet</p>
+            <p class="memora-kicker">Gallery</p>
             <h3 class="memora-sheet-title memora-sheet-title-lg">
               ${photos.length} ${photos.length === 1 ? 'photograph' : 'photographs'}
             </h3>

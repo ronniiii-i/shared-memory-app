@@ -3246,7 +3246,7 @@
    that says what and when, and evenly-cut frames with a catalogue number in
    the corner. Captions live on paper below the image rather than behind a
    hover scrim, so the gallery reads without any interaction at all. */
-.memora-contact-sheet {
+.memora-gallery {
   display: flex;
   flex-direction: column;
   gap: clamp(1.5rem, 3vw, 2.25rem);

@@ -1,4 +1,4 @@
-import { db, pool } from './index.js';
+import { db } from './index.js';
 import { users, albums, albumMembers, photos, reactions, audioNotes } from './schema.js';
 import crypto from 'crypto';
 
@@ -281,7 +281,4 @@ seed()
   .catch((error) => {
     console.error('❌ Seed failed:', error);
     process.exit(1);
-  })
-  .finally(() => {
-    pool.end();
   });

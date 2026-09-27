@@ -1,6 +1,12 @@
 import { UIComponent } from '../core/UIComponent.js';
 import { store } from '../core/Store.js';
 import { api } from '../services/api.js';
+import { compressImage } from '../services/compress.js';
+import { toast } from './Toast.js';
+import { doodleLayer, doodle } from './Doodles.js';
+
+/** Avatars are shown small, so anything larger than this is wasted bytes. */
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 export class ProfileView extends UIComponent {
   constructor(props) {
@@ -11,6 +17,9 @@ export class ProfileView extends UIComponent {
     this.message = '';
     this.error = '';
     this._fetched = false;
+
+    this.avatarUploading = false;
+    this.avatarError = '';
   }
 
   onUnmount() {
@@ -27,10 +36,74 @@ export class ProfileView extends UIComponent {
       this.isEditing = !this.isEditing;
       this.message = '';
       this.error = '';
+      this.avatarError = '';
       this.update();
     });
 
+    this.delegate('change', '#avatar-file-input', (e) => {
+      const file = e.target.files?.[0];
+      if (file) this.handleAvatarSelect(file);
+    });
+
     this.delegate('submit', '#edit-profile-form', (e) => this.handleSaveProfile(e));
+  }
+
+  /**
+   * Upload a chosen picture immediately, then persist the resulting URL.
+   * Doing it on select (rather than on "Save changes") means the person sees
+   * their new picture straight away and never has to paste a URL anywhere.
+   */
+  async handleAvatarSelect(file) {
+    this.avatarError = '';
+
+    if (!file.type.startsWith('image/')) {
+      this.avatarError = 'That file is not an image.';
+      this.update();
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      this.avatarError = 'That image is larger than 5 MB. Try a smaller one.';
+      this.update();
+      return;
+    }
+
+    this.avatarUploading = true;
+    this.update();
+
+    try {
+      // An avatar is only ever shown small, so cap the long edge well below
+      // the photo pipeline's 1920px.
+      const compressed = await compressImage(file, {
+        maxSizeMB: 0.4,
+        maxWidthOrHeight: 512,
+        initialQuality: 0.85,
+      });
+
+      const { uploadUrl, publicUrl } = await api.post('/upload/generate-url', {
+        folder: 'avatars',
+        filename: compressed.name,
+        contentType: 'image/webp',
+      });
+
+      await api.uploadToPresignedUrl(uploadUrl, compressed, 'image/webp');
+
+      const updated = await api.patch('/users/profile', { avatarUrl: publicUrl });
+
+      this.user = { ...this.user, avatarUrl: updated.avatarUrl };
+      if (store.currentUser) {
+        store.currentUser = { ...store.currentUser, avatarUrl: updated.avatarUrl };
+      }
+
+      const input = this.$('#avatar-file-input');
+      if (input) input.value = '';
+
+      this.message = 'New picture saved.';
+    } catch (err) {
+      this.avatarError = err.message || 'Could not upload that picture.';
+    } finally {
+      this.avatarUploading = false;
+      this.update();
+    }
   }
 
   async fetchProfileData() {
@@ -52,19 +125,18 @@ export class ProfileView extends UIComponent {
     this.error = '';
 
     const nameInput = this.$('#edit-name-input');
-    const avatarInput = this.$('#edit-avatar-input');
     const currPassInput = this.$('#edit-curr-pass-input');
     const newPassInput = this.$('#edit-new-pass-input');
 
     const displayName = nameInput ? nameInput.value.trim() : undefined;
-    const avatarUrl = avatarInput ? avatarInput.value.trim() : undefined;
     const currentPassword = currPassInput ? currPassInput.value : undefined;
     const newPassword = newPassInput ? newPassInput.value : undefined;
 
     try {
+      // The picture is already saved by handleAvatarSelect; this form only
+      // handles the name and password.
       const updated = await api.patch('/users/profile', {
         displayName,
-        avatarUrl,
         currentPassword,
         newPassword,
       });
@@ -87,12 +159,16 @@ export class ProfileView extends UIComponent {
   render() {
     if (!this.user) {
       return `
-        <div class="max-w-md mx-auto my-20 editorial-card p-8 rounded-2xl text-center">
-          <h2 class="font-serif-heading text-2xl font-bold text-heading mb-2">Sign In Required</h2>
-          <p class="text-xs text-muted mb-6">Please sign in to access your profile and album settings.</p>
-          <button onclick="document.dispatchEvent(new CustomEvent('open-custom-auth'))" class="px-6 py-3 bg-[var(--accent-sienna)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer">
-            Sign In Now
-          </button>
+        <div class="memora-page memora-wash">
+          <div class="memora-empty memora-reveal">
+            <div class="memora-empty-mark"><i data-lucide="user-round" aria-hidden="true"></i></div>
+            <h3>Sign in to see your shelf</h3>
+            <p>Your profile keeps your display name, your avatar, and a running count of everything you have shared.</p>
+            <button class="memora-button memora-empty-action" onclick="document.dispatchEvent(new CustomEvent('open-custom-auth'))">
+              <i data-lucide="log-in" aria-hidden="true"></i>
+              <span>Sign in now</span>
+            </button>
+          </div>
         </div>
       `;
     }
@@ -100,87 +176,151 @@ export class ProfileView extends UIComponent {
     const { user, stats } = this;
 
     return `
-      <div class="max-w-4xl mx-auto px-6 py-12">
-        <!-- Header Profile Card -->
-        <div class="memora-profile-card editorial-card p-8 rounded-3xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div class="flex items-center gap-5">
-            <img src="${user.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + user.username}" alt="${user.username}" class="w-20 h-20 rounded-full border-2 border-[var(--border-strong)] bg-stone-100 object-cover" />
-            <div>
-              <h1 class="font-serif-heading text-3xl font-bold text-heading">${user.displayName || user.username}</h1>
-              <p class="text-xs text-muted font-mono mt-1">@${user.username}</p>
-              <p class="text-xs text-muted mt-1">Keeping memories with Memora since ${new Date(user.createdAt || Date.now()).toLocaleDateString()}</p>
+      <div class="memora-page memora-wash">
+        ${doodleLayer(
+          [
+            [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'top: 0.5rem; right: 6%; --memora-tilt: -5deg;' }],
+            [doodle.leafSprig, { className: 'memora-doodle memora-doodle-size-md memora-drift', style: 'bottom: 8%; left: -1.5rem;' }],
+          ],
+          'memora-doodles-leaf memora-doodles-faint'
+        )}
+
+        <div class="memora-settings">
+          <header class="memora-profile-card memora-sheet memora-reveal">
+            <div class="memora-profile-id">
+              <img
+                class="memora-profile-avatar"
+                src="${user.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + user.username}"
+                alt="${user.username}"
+              />
+              <div>
+                <h1>${user.displayName || user.username}</h1>
+                <p class="memora-profile-handle">@${user.username}</p>
+                <p class="memora-profile-since">Keeping memories with Memora since ${new Date(user.createdAt || Date.now()).toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            <button class="btn-toggle-edit memora-button">
+              <i data-lucide="${this.isEditing ? 'x' : 'edit-3'}" aria-hidden="true"></i>
+              <span>${this.isEditing ? 'Cancel editing' : 'Edit profile'}</span>            </button>
+          </header>
+
+          ${this.message ? `
+            <p class="memora-notice memora-notice-success" role="status">
+              <i data-lucide="check-circle-2" aria-hidden="true"></i>
+              <span>${this.message}</span>
+            </p>
+          ` : ''}
+
+          ${this.error ? `
+            <p class="memora-notice memora-notice-error" role="alert">
+              <i data-lucide="alert-circle" aria-hidden="true"></i>
+              <span>${this.error}</span>
+            </p>
+          ` : ''}
+
+          <div class="memora-stats">
+            <div class="memora-stat memora-sheet memora-reveal" style="--memora-reveal-delay: 60ms">
+              <span class="memora-stat-value">${stats.albumsCount}</span>
+              <span class="memora-stat-label">Memory shelves</span>
+            </div>
+            <div class="memora-stat memora-sheet memora-reveal" style="--memora-reveal-delay: 130ms">
+              <span class="memora-stat-value">${stats.photosCount}</span>
+              <span class="memora-stat-label">Photos shared</span>
             </div>
           </div>
 
-          <button class="btn-toggle-edit px-5 py-2.5 bg-stone-800 dark:bg-stone-700 hover:bg-stone-700 text-white font-semibold text-xs rounded-xl cursor-pointer transition-all flex items-center gap-2">
-            <i data-lucide="${this.isEditing ? 'x' : 'edit-3'}" class="w-4 h-4"></i>
-            <span>${this.isEditing ? 'Cancel Editing' : 'Edit Profile'}</span>
-          </button>
-        </div>
+          ${
+            this.isEditing
+              ? `
+            <section class="memora-sheet memora-doodle-host memora-reveal">
+              ${doodleLayer(
+                [
+                  [doodle.paperCorner, { className: 'memora-doodle memora-doodle-size-sm memora-float', style: 'top: 1rem; right: 1.5rem;' }],
+                ],
+                'memora-doodles-honey memora-doodles-faint'
+              )}
 
-        ${this.message ? `
-          <div class="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-            ${this.message}
-          </div>
-        ` : ''}
+              <h2 class="memora-sheet-title">
+                <i data-lucide="settings-2" aria-hidden="true"></i>
+                <span>Account settings</span>
+              </h2>
 
-        ${this.error ? `
-          <div class="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold">
-            ${this.error}
-          </div>
-        ` : ''}
+              <!-- Picture first: it saves on pick, so the form below is only
+                   ever about the name and the password. -->
+              <div class="memora-avatar-picker">
+                <img
+                  class="memora-avatar-picker-preview"
+                  src="${user.avatarUrl || 'https://api.dicebear.com/9.x/avataaars/svg?seed=' + user.username}"
+                  alt="Your current profile picture"
+                />
+                <div class="memora-avatar-picker-body">
+                  <span class="memora-label" id="avatar-picker-label">Your picture</span>
+                  <p class="memora-sheet-copy">
+                    Pick a photo from your device. It is resized and uploaded for you — nothing to paste.
+                  </p>
 
-        <!-- Stats Overview -->
-        <div class="grid grid-cols-2 gap-4 mb-8">
-          <div class="editorial-card p-6 rounded-2xl">
-            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Memory shelves</div>
-            <div class="font-serif-heading text-4xl font-bold text-heading mt-2">${stats.albumsCount}</div>
-          </div>
-          <div class="editorial-card p-6 rounded-2xl">
-            <div class="text-xs font-semibold text-muted uppercase tracking-wider">Photos shared</div>
-            <div class="font-serif-heading text-4xl font-bold text-heading mt-2">${stats.photosCount}</div>
-          </div>
-        </div>
+                  <input
+                    type="file"
+                    id="avatar-file-input"
+                    accept="image/png,image/jpeg,image/webp"
+                    class="memora-file-input"
+                    aria-labelledby="avatar-picker-label"
+                  />
 
-        <!-- Edit Profile Form -->
-        ${this.isEditing ? `
-          <div class="editorial-card p-8 rounded-3xl mb-8">
-            <h2 class="font-serif-heading text-xl font-bold text-heading mb-6">Account Settings</h2>
-            
-            <form id="edit-profile-form" class="space-y-5">
-              <div>
-                <label for="edit-name-input" class="block text-xs font-semibold text-main mb-1.5">Display Name</label>
-                <input type="text" id="edit-name-input" value="${user.displayName || ''}" placeholder="e.g. Alex Rivera" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
-              </div>
+                  <div class="memora-avatar-picker-actions">
+                    <label for="avatar-file-input" class="memora-button memora-button-inline memora-avatar-choose">
+                      <i data-lucide="image-up" aria-hidden="true"></i>
+                      <span>${this.avatarUploading ? 'Uploading…' : 'Choose a photo'}</span>
+                    </label>
+                    ${
+                      this.avatarUploading
+                        ? `<span class="memora-avatar-spinner" role="status" aria-label="Uploading your picture"></span>`
+                        : ''
+                    }
+                  </div>
 
-              <div>
-                <label for="edit-avatar-input" class="block text-xs font-semibold text-main mb-1.5">Avatar Image URL (Optional)</label>
-                <input type="url" id="edit-avatar-input" value="${user.avatarUrl || ''}" placeholder="https://..." class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
-              </div>
-
-              <div class="pt-4 border-t border-[var(--border-color)] space-y-4">
-                <h3 class="font-semibold text-xs text-heading uppercase tracking-wider">Change Password</h3>
-                <div>
-                  <label for="edit-curr-pass-input" class="block text-xs font-semibold text-main mb-1.5">Current Password</label>
-                  <input type="password" id="edit-curr-pass-input" placeholder="••••••••" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+                  ${
+                    this.avatarError
+                      ? `<p class="memora-form-error" role="alert">${this.avatarError}</p>`
+                      : ''
+                  }
                 </div>
-                <div>
-                  <label for="edit-new-pass-input" class="block text-xs font-semibold text-main mb-1.5">New Password</label>
-                  <input type="password" id="edit-new-pass-input" placeholder="At least 6 characters" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
-                </div>
               </div>
 
-              <div class="flex justify-end gap-3 pt-4">
-                <button type="button" class="btn-toggle-edit px-5 py-2.5 bg-stone-200 dark:bg-stone-800 text-main font-semibold text-xs rounded-xl cursor-pointer">
-                  Cancel
-                </button>
-                <button type="submit" class="px-6 py-2.5 bg-[var(--accent-sienna)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer">
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        ` : ''}
+              <form id="edit-profile-form" class="memora-form" style="margin-top: 1.5rem">
+                <div>
+                  <label for="edit-name-input" class="memora-label">Display name</label>
+                  <input type="text" id="edit-name-input" value="${user.displayName || ''}" placeholder="e.g. Alex Rivera" class="memora-control" />
+                </div>
+
+                <div class="memora-divider" role="presentation"></div>
+
+                <h3 class="memora-kicker">Change password</h3>
+
+                <div>
+                  <label for="edit-curr-pass-input" class="memora-label">Current password</label>
+                  <input type="password" id="edit-curr-pass-input" placeholder="••••••••" class="memora-control" />
+                </div>
+
+                <div>
+                  <label for="edit-new-pass-input" class="memora-label">New password</label>
+                  <input type="password" id="edit-new-pass-input" placeholder="At least 6 characters" class="memora-control" />
+                </div>
+
+                <div class="memora-form-actions">
+                  <button type="button" class="btn-toggle-edit memora-pill">Cancel</button>
+                  <button type="submit" class="memora-button memora-button-inline">
+                    <i data-lucide="check" aria-hidden="true"></i>
+                    <span>Save changes</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+          `
+              : ''
+          }
+        </div>
       </div>
     `;
   }

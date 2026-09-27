@@ -10,7 +10,7 @@ const router = Router();
 /**
  * POST /api/upload/generate-url
  * Generate a pre-signed R2 upload URL.
- * Body: { folder: 'photos' | 'audio', filename: string, contentType: string }
+ * Body: { folder: 'photos' | 'audio' | 'avatars', filename: string, contentType: string }
  * Returns: { uploadUrl, publicUrl, key }
  */
 router.post('/generate-url', requireAuth, async (req, res) => {
@@ -21,8 +21,8 @@ router.post('/generate-url', requireAuth, async (req, res) => {
     return;
   }
 
-  if (!['photos', 'audio'].includes(folder)) {
-    res.status(400).json({ error: 'folder must be "photos" or "audio"' });
+  if (!['photos', 'audio', 'avatars'].includes(folder)) {
+    res.status(400).json({ error: 'folder must be "photos", "audio" or "avatars"' });
     return;
   }
 

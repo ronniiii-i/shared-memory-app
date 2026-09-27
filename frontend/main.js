@@ -5,7 +5,9 @@ import { AlbumList } from './src/components/AlbumList.js';
 import { ScrapbookView } from './src/components/ScrapbookView.js';
 import { JoinAlbum } from './src/components/JoinAlbum.js';
 import { ProfileView } from './src/components/ProfileView.js';
+import { doodleLayer, doodle } from './src/components/Doodles.js';
 import { api } from './src/services/api.js';
+import { createIcons, icons } from 'lucide';
 
 // Load stored theme preference
 loadPersistedState();
@@ -28,76 +30,85 @@ export function openAuthModal(initialTab = 'login') {
   if (!modalOverlay) {
     modalOverlay = document.createElement('div');
     modalOverlay.id = 'vibevault-auth-modal';
-    modalOverlay.className = 'fixed inset-0 z-[99999] bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto';
+    modalOverlay.className = 'fixed inset-0 z-[99999] memora-modal-scrim';
     document.body.appendChild(modalOverlay);
   }
 
   modalOverlay.innerHTML = `
-    <div class="relative editorial-card border border-[var(--border-color)] rounded-3xl p-8 shadow-2xl max-w-md w-full my-8 text-main animate-in fade-in zoom-in duration-150">
-      <button id="close-auth-modal" class="absolute top-4 right-4 p-2 text-muted hover:text-heading rounded-full bg-stone-200/50 dark:bg-stone-800/50 transition-colors cursor-pointer z-10" aria-label="Close modal">
-        ✕
+    <div class="relative memora-modal memora-sheet memora-doodle-host">
+      ${doodleLayer(
+        [
+          [doodle.leafSprig, { className: 'memora-doodle memora-doodle-size-sm memora-drift', style: 'top: 4.5rem; left: -1.25rem; --memora-tilt: -7deg;' }],
+          [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'bottom: -0.5rem; right: 2rem; --memora-tilt: 4deg;' }],
+        ],
+        'memora-doodles-leaf memora-doodles-faint'
+      )}
+
+      <button id="close-auth-modal" class="absolute top-4 right-4 memora-pill memora-pill-quiet" style="padding: 0.45rem" aria-label="Close modal">
+        <i data-lucide="x" aria-hidden="true"></i>
       </button>
 
-      <div class="w-full text-center space-y-4">
-        <div class="w-12 h-12 rounded-2xl bg-[var(--accent-sienna)] text-white flex items-center justify-center mx-auto shadow-md">
-          <i data-lucide="camera" class="w-6 h-6"></i>
-        </div>
+      <div class="w-full text-center">
+        <div class="memora-panel-mark mx-auto"><i data-lucide="camera" aria-hidden="true"></i></div>
 
         <div>
-          <h3 class="font-serif-heading font-bold text-2xl text-heading">Welcome to Memora</h3>
-          <p class="text-xs text-muted mt-1">A collaborative space for collecting and reliving shared moments</p>
+          <p class="memora-kicker">Memora</p>
+          <h3 class="memora-modal-title">Welcome back</h3>
+          <p class="memora-sheet-copy">A shared place for collecting and reliving moments together.</p>
         </div>
 
         <!-- Auth Tabs Switcher -->
-        <div class="flex border-b border-[var(--border-color)] mt-4">
-          <button id="tab-login-btn" class="flex-1 py-2.5 text-xs font-semibold border-b-2 cursor-pointer transition-colors ${initialTab === 'login' ? 'border-[var(--accent-sienna)] text-[var(--accent-sienna)]' : 'border-transparent text-muted hover:text-main'}">
+        <div class="memora-auth-tabs" role="tablist">
+          <button id="tab-login-btn" role="tab" aria-selected="${initialTab === 'login'}" class="${initialTab === 'login' ? 'border-[var(--accent-sienna)] text-[var(--accent-sienna)]' : 'border-transparent text-muted hover:text-main'}">
             Sign In
           </button>
-          <button id="tab-register-btn" class="flex-1 py-2.5 text-xs font-semibold border-b-2 cursor-pointer transition-colors ${initialTab === 'register' ? 'border-[var(--accent-sienna)] text-[var(--accent-sienna)]' : 'border-transparent text-muted hover:text-main'}">
+          <button id="tab-register-btn" role="tab" aria-selected="${initialTab === 'register'}" class="${initialTab === 'register' ? 'border-[var(--accent-sienna)] text-[var(--accent-sienna)]' : 'border-transparent text-muted hover:text-main'}">
             Create Account
           </button>
         </div>
 
         <!-- Sign In Form -->
-        <form id="auth-login-form" class="space-y-4 text-left pt-3 ${initialTab === 'login' ? '' : 'hidden'}">
+        <form id="auth-login-form" class="memora-form-stack text-left pt-5 ${initialTab === 'login' ? '' : 'hidden'}">
           <div>
-            <label for="login-username" class="block text-xs font-semibold text-main mb-1">Username</label>
-            <input type="text" id="login-username" required placeholder="e.g. alex_vibes" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+            <label for="login-username" class="memora-label">Username</label>
+            <input type="text" id="login-username" required placeholder="e.g. alex_vibes" class="memora-control memora-control-mono" />
           </div>
 
           <div>
-            <label for="login-password" class="block text-xs font-semibold text-main mb-1">Password</label>
-            <input type="password" id="login-password" required placeholder="••••••••" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+            <label for="login-password" class="memora-label">Password</label>
+            <input type="password" id="login-password" required placeholder="••••••••" class="memora-control" />
           </div>
 
-          <div id="login-error-msg" class="hidden text-xs text-red-500 font-semibold p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center"></div>
+          <div id="login-error-msg" class="memora-form-error hidden"></div>
 
-          <button type="submit" class="w-full py-3.5 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer transition-all hover:scale-[1.01]">
-            Sign In
+          <button type="submit" class="memora-button memora-button-block memora-button-inline">
+            <i data-lucide="log-in" aria-hidden="true"></i>
+            <span>Sign In</span>
           </button>
         </form>
 
         <!-- Register Form -->
-        <form id="auth-register-form" class="space-y-4 text-left pt-3 ${initialTab === 'register' ? '' : 'hidden'}">
+        <form id="auth-register-form" class="memora-form-stack text-left pt-5 ${initialTab === 'register' ? '' : 'hidden'}">
           <div>
-            <label for="reg-name" class="block text-xs font-semibold text-main mb-1">Display Name</label>
-            <input type="text" id="reg-name" placeholder="e.g. Alex Rivera" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+            <label for="reg-name" class="memora-label">Display Name <span class="memora-label memora-label-quiet">optional</span></label>
+            <input type="text" id="reg-name" placeholder="e.g. Alex Rivera" class="memora-control" />
           </div>
 
           <div>
-            <label for="reg-username" class="block text-xs font-semibold text-main mb-1">Username *</label>
-            <input type="text" id="reg-username" required placeholder="e.g. alex_vibes" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+            <label for="reg-username" class="memora-label">Username</label>
+            <input type="text" id="reg-username" required placeholder="e.g. alex_vibes" class="memora-control memora-control-mono" />
           </div>
 
           <div>
-            <label for="reg-password" class="block text-xs font-semibold text-main mb-1">Password (min 6 characters) *</label>
-            <input type="password" id="reg-password" required minlength="6" placeholder="••••••••" class="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-xs text-main focus:outline-none focus:border-[var(--accent-sienna)]" />
+            <label for="reg-password" class="memora-label">Password <span class="memora-label memora-label-quiet">min 6 characters</span></label>
+            <input type="password" id="reg-password" required minlength="6" placeholder="••••••••" class="memora-control" />
           </div>
 
-          <div id="reg-error-msg" class="hidden text-xs text-red-500 font-semibold p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-center"></div>
+          <div id="reg-error-msg" class="memora-form-error hidden"></div>
 
-          <button type="submit" class="w-full py-3.5 bg-[var(--accent-sienna)] hover:bg-[var(--accent-terracotta)] text-white font-semibold text-xs rounded-xl shadow cursor-pointer transition-all hover:scale-[1.01]">
-            Create Account
+          <button type="submit" class="memora-button memora-button-block memora-button-inline">
+            <i data-lucide="user-plus" aria-hidden="true"></i>
+            <span>Create Account</span>
           </button>
         </form>
       </div>
@@ -105,6 +116,13 @@ export function openAuthModal(initialTab = 'login') {
   `;
 
   modalOverlay.style.display = 'flex';
+
+  // The modal lives outside the Router, so it renders its own Lucide icons.
+  try {
+    createIcons({ icons, nameAttr: 'data-lucide' });
+  } catch {
+    // Lucide still initialising — icons fall back to their placeholders.
+  }
 
   const closeBtn = document.getElementById('close-auth-modal');
   const tabLogin = document.getElementById('tab-login-btn');
@@ -138,6 +156,8 @@ export function openAuthModal(initialTab = 'login') {
       tabLogin?.classList.remove('border-[var(--accent-sienna)]', 'text-[var(--accent-sienna)]');
       tabLogin?.classList.add('border-transparent', 'text-muted');
     }
+    tabLogin?.setAttribute('aria-selected', String(tab === 'login'));
+    tabRegister?.setAttribute('aria-selected', String(tab === 'register'));
   };
 
   if (tabLogin) tabLogin.onclick = () => switchTab('login');

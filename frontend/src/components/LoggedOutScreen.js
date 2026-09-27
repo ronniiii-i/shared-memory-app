@@ -1,6 +1,7 @@
 import { UIComponent } from '../core/UIComponent.js';
 import { toast } from './Toast.js';
 import { store } from '../core/Store.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class LoggedOutScreen extends UIComponent {
   constructor(props) {
@@ -40,7 +41,15 @@ export class LoggedOutScreen extends UIComponent {
   render() {
     return `
       <main class="session-screen">
-        <section class="session-panel" aria-labelledby="session-title">
+        <section class="session-panel memora-doodle-host" aria-labelledby="session-title">
+          ${doodleLayer(
+            [
+              [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'top: -0.5rem; left: 50%; margin-left: -2rem; --memora-tilt: -3deg;' }],
+              [doodle.leafSprig, { className: 'memora-doodle memora-doodle-size-sm memora-drift', style: 'bottom: -0.75rem; right: 1.5rem; --memora-tilt: -7deg;' }],
+            ],
+            'memora-doodles-leaf memora-doodles-faint'
+          )}
+
           <div class="session-icon"><i data-lucide="log-in" aria-hidden="true"></i></div>
           <p class="session-eyebrow">Memora</p>
           <h1 id="session-title">Your session has ended</h1>

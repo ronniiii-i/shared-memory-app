@@ -2,6 +2,7 @@ import { UIComponent } from '../core/UIComponent.js';
 import { compressImage } from '../services/compress.js';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class PhotoUploader extends UIComponent {
   constructor(props) {
@@ -90,7 +91,15 @@ export class PhotoUploader extends UIComponent {
 
   render() {
     return `
-      <div class="memora-panel memora-upload-panel max-w-xl mx-auto">
+      <section class="memora-panel memora-upload-panel memora-doodle-host max-w-xl mx-auto">
+        ${doodleLayer(
+          [
+            [doodle.cameraDoodle, { className: 'memora-doodle memora-doodle-size-sm memora-float', style: 'top: 5rem; right: -1rem; --memora-tilt: -6deg;' }],
+            [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'bottom: -0.6rem; left: 2.5rem; --memora-tilt: 4deg;' }],
+          ],
+          'memora-doodles-honey memora-doodles-faint'
+        )}
+
         <div class="memora-panel-mark"><i data-lucide="image-plus"></i></div>
         <h3 class="font-serif-heading text-2xl font-bold text-heading mb-2 flex items-center gap-2">
           <span>Add to the memory table</span>
@@ -121,10 +130,10 @@ export class PhotoUploader extends UIComponent {
         </div>
 
         <div class="mt-6">
-          <label for="photo-caption-input" class="block text-xs font-semibold text-main mb-1.5">A note for this photograph <span class="text-muted font-normal">optional</span></label>
-          <input type="text" id="photo-caption-input" placeholder="A place, a feeling, an inside joke..." class="memora-input w-full" />
+          <label for="photo-caption-input" class="memora-label">A note for this photograph <span class="memora-label memora-label-quiet">optional</span></label>
+          <input type="text" id="photo-caption-input" placeholder="A place, a feeling, an inside joke..." class="memora-control w-full" />
         </div>
-      </div>
+      </section>
     `;
   }
 }

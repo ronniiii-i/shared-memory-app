@@ -1,6 +1,7 @@
 import { UIComponent } from '../core/UIComponent.js';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class JoinAlbum extends UIComponent {
   constructor(props) {
@@ -55,23 +56,21 @@ export class JoinAlbum extends UIComponent {
   render() {
     if (this.error) {
       return `
-        <div class="max-w-md mx-auto my-20 glass-panel p-8 rounded-3xl border border-red-500/30 text-center">
-          <div class="w-14 h-14 rounded-2xl bg-red-600/20 text-red-400 flex items-center justify-center mx-auto mb-4 border border-red-500/30">
-            <i data-lucide="alert-triangle" class="w-7 h-7"></i>
+        <div class="memora-page memora-wash">
+          <div class="memora-empty memora-reveal">
+            <div class="memora-empty-mark memora-empty-mark-warn"><i data-lucide="alert-triangle" aria-hidden="true"></i></div>
+            <h3>This invite link has gone cold</h3>
+            <p>${this.error}</p>
+            <a href="#/" class="memora-button memora-empty-action">Go to home</a>
           </div>
-          <h2 class="text-xl font-bold text-white mb-2 font-heading">Invalid Invite Link</h2>
-          <p class="text-xs text-slate-400 mb-6">${this.error}</p>
-          <a href="#/" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl inline-block shadow-lg">
-            Go to Home
-          </a>
         </div>
       `;
     }
 
     if (!this.album) {
       return `
-        <div class="flex items-center justify-center min-h-[60vh]">
-          <div class="loader-spinner">
+        <div class="memora-page memora-wash">
+          <div class="loader-spinner" style="margin: 6rem auto;">
             <div class="spinner-ring"></div>
           </div>
         </div>
@@ -79,36 +78,55 @@ export class JoinAlbum extends UIComponent {
     }
 
     return `
-      <div class="max-w-md mx-auto my-16 glass-panel p-8 rounded-3xl border border-slate-700 shadow-2xl">
-        <div class="text-center mb-6">
-          <div class="w-16 h-16 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center mx-auto mb-3 border border-purple-500/30">
-            <i data-lucide="camera" class="w-8 h-8"></i>
+      <div class="memora-page memora-wash">
+        ${doodleLayer(
+          [
+            [doodle.leafSprig, { className: 'memora-doodle memora-doodle-size-lg memora-drift', style: 'top: 6%; left: -1.75rem;' }],
+            [doodle.heartScribble, { className: 'memora-doodle memora-doodle-size-sm memora-float', style: 'bottom: 4%; right: 2%; --memora-tilt: 7deg;' }],
+          ],
+          'memora-doodles-leaf memora-doodles-faint'
+        )}
+
+        <section class="memora-panel memora-doodle-host max-w-md mx-auto memora-reveal">
+          ${doodleLayer(
+            [
+              [doodle.scribbleUnderline, { className: 'memora-doodle memora-doodle-size-sm', style: 'bottom: -0.9rem; left: 12%; --memora-tilt: -2deg;' }],
+            ],
+            'memora-doodles-honey memora-doodles-faint'
+          )}
+
+          <div class="memora-panel-mark"><i data-lucide="camera" aria-hidden="true"></i></div>
+
+          <h1 class="font-serif-heading text-2xl font-bold text-heading">You're invited.</h1>
+          <p class="memora-sheet-copy" style="font-size: 0.85rem">Someone would like you to add your photographs to their album.</p>
+
+          <div class="memora-sheet memora-sheet-flat" style="margin-top: 1.5rem; text-align: center">
+            <h2 class="font-serif-heading text-xl font-bold text-heading">${this.album.title}</h2>
+            ${
+              this.album.description
+                ? `<p class="memora-sheet-copy" style="margin-top: 0.4rem">${this.album.description}</p>`
+                : ''
+            }
           </div>
-          <h1 class="text-2xl font-bold text-white font-heading">You're Invited!</h1>
-          <p class="text-xs text-slate-400 mt-1">Join the shared photo album</p>
-        </div>
 
-        <div class="bg-slate-950/60 p-5 rounded-2xl border border-slate-800 mb-6 text-center">
-          <h2 class="text-lg font-bold text-purple-300 font-heading">${this.album.title}</h2>
-          ${this.album.description ? `<p class="text-xs text-slate-400 mt-1.5 leading-relaxed">${this.album.description}</p>` : ''}
-        </div>
+          <form id="join-form" class="memora-form" style="margin-top: 1.5rem">
+            ${
+              this.album.requiresPasscode
+                ? `
+              <div>
+                <label for="passcode-input" class="memora-label">Passcode required</label>
+                <input type="password" id="passcode-input" required placeholder="Enter the album passcode" class="memora-control memora-control-mono" />
+              </div>
+            `
+                : ''
+            }
 
-        <form id="join-form" class="space-y-4">
-          ${this.album.requiresPasscode ? `
-            <div>
-              <label for="passcode-input" class="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                <i data-lucide="lock" class="w-4 h-4 text-purple-400"></i>
-                <span>Passcode Required</span>
-              </label>
-              <input type="password" id="passcode-input" required placeholder="Enter album passcode" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-purple-500" />
-            </div>
-          ` : ''}
-
-          <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-sm rounded-xl shadow-lg cursor-pointer transition-transform hover:scale-[1.02] flex items-center justify-center gap-2">
-            <i data-lucide="folder-plus" class="w-4 h-4"></i>
-            <span>${this.isJoining ? 'Joining...' : 'Join Album Scrapbook'}</span>
-          </button>
-        </form>
+            <button type="submit" class="memora-button memora-button-block">
+              <i data-lucide="folder-plus" aria-hidden="true"></i>
+              <span>${this.isJoining ? 'Joining…' : 'Join the scrapbook'}</span>
+            </button>
+          </form>
+        </section>
       </div>
     `;
   }

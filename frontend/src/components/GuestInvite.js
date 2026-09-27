@@ -2,6 +2,7 @@ import { UIComponent } from '../core/UIComponent.js';
 import QRCode from 'qrcode';
 import { api } from '../services/api.js';
 import { toast } from './Toast.js';
+import { doodleLayer, doodle } from './Doodles.js';
 
 export class GuestInvite extends UIComponent {
   constructor(props) {
@@ -69,7 +70,15 @@ export class GuestInvite extends UIComponent {
     const inviteUrl = this.getInviteUrl();
 
     return `
-      <div class="memora-panel memora-invite-panel max-w-lg mx-auto">
+      <section class="memora-panel memora-invite-panel memora-doodle-host max-w-lg mx-auto">
+        ${doodleLayer(
+          [
+            [doodle.dashedLoop, { className: 'memora-doodle memora-doodle-size-md memora-drift', style: 'top: 5.5rem; right: -1.75rem; --memora-tilt: 6deg;' }],
+            [doodle.squiggle, { className: 'memora-doodle memora-doodle-size-sm', style: 'bottom: -0.6rem; left: 2.5rem; --memora-tilt: -4deg;' }],
+          ],
+          'memora-doodles-sky memora-doodles-faint'
+        )}
+
         <div class="memora-panel-mark"><i data-lucide="send"></i></div>
         <h3 class="font-serif-heading text-2xl font-bold text-heading mb-2 flex items-center gap-2">
           <span>Make room at the table</span>
@@ -91,32 +100,39 @@ export class GuestInvite extends UIComponent {
           </div>
         ` : ''}
 
+        <!-- Share code — the short form, for copying by hand -->
+        <div class="memora-sheet memora-sheet-flat" style="margin-bottom: 1.5rem; text-align: center">
+          <span class="memora-kicker">Or type the code in</span>
+          <div style="margin-top: 0.5rem">
+            <span class="memora-code" style="font-size: 1.1rem; padding: 0.3rem 0.8rem">${this.album.shareCode}</span>
+          </div>
+        </div>
+
         <!-- Short Link -->
         <div class="mb-6">
-          <label for="share-link-input" class="block text-xs font-semibold text-main mb-1.5">A link to share</label>
-          <div class="flex gap-2">
-            <input type="text" id="share-link-input" readonly value="${inviteUrl}" class="memora-input flex-1 font-mono select-all" />
+          <label for="share-link-input" class="memora-label">Or send the link</label>
+          <div class="memora-field-row">
+            <input type="text" id="share-link-input" readonly value="${inviteUrl}" class="memora-control memora-control-mono select-all" />
             <button class="btn-copy-link memora-button" aria-label="Copy invite link">
-              <i data-lucide="${this.copied ? 'check' : 'copy'}" class="w-4 h-4"></i>
+              <i data-lucide="${this.copied ? 'check' : 'copy'}" aria-hidden="true"></i>
               <span>${this.copied ? 'Copied!' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
         <!-- Passcode Setting -->
-        <div class="pt-6 border-t border-[var(--border-color)]">
-          <label for="passcode-input" class="block text-xs font-semibold text-main mb-1.5 flex items-center gap-1.5">
-            <i data-lucide="lock" class="w-3.5 h-3.5 text-[var(--accent-sienna)]"></i>
-            <span>Keep it among friends <span class="text-muted font-normal">optional passcode</span></span>
-          </label>
-          <div class="flex gap-2">
-            <input type="text" id="passcode-input" placeholder="e.g. summer-at-the-lake" value="${this.album.passcode || ''}" class="memora-input flex-1" />
+        <div class="memora-divider" role="presentation"></div>
+
+        <div>
+          <label for="passcode-input" class="memora-label">Keep it among friends <span class="memora-label memora-label-quiet">optional passcode</span></label>
+          <div class="memora-field-row">
+            <input type="text" id="passcode-input" placeholder="e.g. summer-at-the-lake" value="${this.album.passcode || ''}" class="memora-control memora-control-mono" />
             <button class="btn-save-passcode memora-button memora-button-quiet" aria-label="Save passcode">
               Save
             </button>
           </div>
         </div>
-      </div>
+      </section>
     `;
   }
 }

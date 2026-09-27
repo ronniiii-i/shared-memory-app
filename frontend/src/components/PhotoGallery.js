@@ -36,6 +36,7 @@ export class PhotoGallery extends UIComponent {
 
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.touchStartX = 0;
+    this._keydownBound = false;
   }
 
   onMount() {
@@ -63,11 +64,19 @@ export class PhotoGallery extends UIComponent {
     // The lightbox is portalled to <body>, so it needs its own wiring.
     this.mountLightbox();
 
-    document.addEventListener('keydown', this.handleKeyDown);
+    // onMount() runs again after every update(), and addEventListener is not
+    // idempotent the way mountLightbox's early return is. Left unguarded, each
+    // re-render added another copy of the same handler, so one press of the
+    // right-arrow key walked N photographs at a time.
+    if (!this._keydownBound) {
+      this._keydownBound = true;
+      document.addEventListener('keydown', this.handleKeyDown);
+    }
   }
 
   onUnmount() {
     document.removeEventListener('keydown', this.handleKeyDown);
+    this._keydownBound = false;
     audioManager.stop();
     if (this.currentPhotoChannel) {
       unsubscribeChannel(this.currentPhotoChannel);

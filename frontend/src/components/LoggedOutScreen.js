@@ -8,6 +8,7 @@ export class LoggedOutScreen extends UIComponent {
     super(props);
     this.secondsRemaining = 5;
     this.redirectTimer = null;
+    this.noticeShown = false;
   }
 
   onMount() {
@@ -19,10 +20,21 @@ export class LoggedOutScreen extends UIComponent {
       document.dispatchEvent(new CustomEvent('open-custom-auth', { detail: { tab: 'login' } }));
     });
 
+    // onMount() runs again on every update(), so the countdown timer and the
+    // notice below are both one-shot effects that have to be guarded. Without
+    // this a re-render stacked a second interval (the seconds ticked down
+    // several at a time) and re-fired the toast, which is why the very first
+    // notification after a page load appeared doubled.
+    if (this.redirectTimer) {
+      window.clearInterval(this.redirectTimer);
+      this.redirectTimer = null;
+    }
+
     this.redirectTimer = window.setInterval(() => {
       this.secondsRemaining -= 1;
       if (this.secondsRemaining <= 0) {
         window.clearInterval(this.redirectTimer);
+        this.redirectTimer = null;
         store.authNotice = null;
         window.location.hash = '#/';
         return;
@@ -31,11 +43,17 @@ export class LoggedOutScreen extends UIComponent {
       if (countdown) countdown.textContent = `${this.secondsRemaining}s`;
     }, 1000);
 
-    toast.info('Your session has ended. Please sign in again.', { duration: 6000 });
+    if (!this.noticeShown) {
+      this.noticeShown = true;
+      toast.info('Your session has ended. Please sign in again.', { duration: 6000 });
+    }
   }
 
   onUnmount() {
-    if (this.redirectTimer) window.clearInterval(this.redirectTimer);
+    if (this.redirectTimer) {
+      window.clearInterval(this.redirectTimer);
+      this.redirectTimer = null;
+    }
   }
 
   render() {

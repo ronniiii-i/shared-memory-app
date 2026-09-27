@@ -92,16 +92,30 @@ app.use(
 // Start Server
 // ═══════════════════════════════════════════════════════════════
 
-app.listen(PORT, () => {
-  console.log("");
-  console.log("═══════════════════════════════════════════════════");
-  console.log(`  🚀 VibeVault API running on http://localhost:${PORT}`);
-  console.log(
-    `  📡 CORS origin: ${process.env.CLIENT_URL || "http://localhost:5173"}`,
-  );
-  console.log(`  🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log("═══════════════════════════════════════════════════");
-  console.log("");
-});
+// Serverless hosts (Vercel functions, Lambda) import this module and invoke the
+// exported Express app directly — they hand us the request, we never pick a
+// port. Binding one there is dead weight, and `PORT` collides with the host's
+// own value, so skip it entirely.
+const isServerless = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
+);
+
+if (!isServerless) {
+  app.listen(PORT, () => {
+    console.log("");
+    console.log("═══════════════════════════════════════════════════");
+    console.log(
+      `  🚀 VibeVault API running on http://localhost:${PORT}`,
+    );
+    console.log(
+      `  📡 CORS origin: ${process.env.CLIENT_URL || "http://localhost:5173"}`,
+    );
+    console.log(
+      `  🌍 Environment: ${process.env.NODE_ENV || "development"}`,
+    );
+    console.log("═══════════════════════════════════════════════════");
+    console.log("");
+  });
+}
 
 export default app;

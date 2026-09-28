@@ -488,9 +488,14 @@ export class ScrapbookView extends UIComponent {
     `;
   }
 
-  onUpdate() {
-    this.mountTabContent();
-  }
+  // Deliberately no onUpdate() here. `update()` calls `onMount()` and then
+  // `onUpdate()`, and `onMount()` already calls `mountTabContent()`. Overriding
+  // both built TWO ScrapbookWorkspace instances on every update: the second
+  // `mountChild` immediately unmounted the first, but both had already bound
+  // their delegated handlers, subscribed to Pusher, and fired a
+  // `/scrapbooks/album/:id` request. Every photo added, member revoked or tab
+  // switched tore the canvas down and rebuilt it. The discarded instance was
+  // also the one that could serialise a half-built canvas over real work.
 
   mountTabContent() {
     if (this.activeTab === 'canvas') {

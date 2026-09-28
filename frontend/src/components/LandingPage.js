@@ -25,7 +25,7 @@ const FLOW_DOODLES = [
 export class LandingPage extends UIComponent {
   onMount() {
     this.delegate('click', '.btn-landing-signin', () => {
-      document.dispatchEvent(new CustomEvent('open-clerk-auth'));
+      document.dispatchEvent(new CustomEvent('open-custom-auth'));
     });
   }
 

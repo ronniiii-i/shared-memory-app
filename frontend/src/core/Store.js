@@ -143,61 +143,6 @@ export function subscribe(keys, callback) {
 }
 
 /**
- * Subscribe to ALL state changes (use sparingly).
- *
- * @param callback - Function called with event detail on any change
- * @returns Cleanup function
- */
-export function subscribeAll(callback) {
-  const handler = (event) => callback(event.detail);
-  document.addEventListener(STATE_CHANGE_EVENT, handler);
-  return () => document.removeEventListener(STATE_CHANGE_EVENT, handler);
-}
-
-/**
- * Batch multiple state updates without firing intermediate events.
- * Fires a single 'stateChange' event with key='_batch' after all updates.
- *
- * @param updater - Function that receives the raw state object
- */
-export function batchUpdate(updater) {
-  // Temporarily replace the proxy with direct object access
-  const rawState = {};
-  for (const key of Object.keys(initialState)) {
-    rawState[key] = store[key];
-  }
-
-  updater(rawState);
-
-  // Apply all changes (each will fire its own event)
-  for (const [key, value] of Object.entries(rawState)) {
-    if (store[key] !== value) {
-      store[key] = value;
-    }
-  }
-}
-
-/**
- * Reset the store to initial state.
- */
-export function resetStore() {
-  for (const [key, value] of Object.entries(initialState)) {
-    store[key] = value;
-  }
-}
-
-/**
- * Get a snapshot of the current state (non-reactive plain object).
- */
-export function getSnapshot() {
-  const snapshot = {};
-  for (const key of Object.keys(initialState)) {
-    snapshot[key] = store[key];
-  }
-  return snapshot;
-}
-
-/**
  * Load persisted theme preference from localStorage.
  */
 export function loadPersistedState() {

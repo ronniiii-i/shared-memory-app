@@ -104,16 +104,6 @@ router.post("/confirm", requireAuth, async (req, res) => {
   res.status(201).json(populatedNote);
 });
 
-// // Notify via Pusher
-// await triggerPhotoEvent(photoId, 'audio:added', {
-//   audioNote: note,
-//   userId,
-//   albumId: photo.albumId,
-// });
-
-// res.status(201).json(note);
-// });
-
 /**
  * DELETE /api/audio/:id
  * Delete an audio note (creator only).

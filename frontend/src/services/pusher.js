@@ -1,5 +1,5 @@
 /**
- * VibeVault — Pusher WebSockets Client
+ * Memora — Pusher WebSockets Client
  */
 
 import Pusher from 'pusher-js';
@@ -13,7 +13,7 @@ const activeSubscriptions = new Map();
 /**
  * Initialize Pusher WebSocket Client
  */
-export function initPusher() {
+function initPusher() {
   const pusherKey = import.meta.env.VITE_PUSHER_KEY;
   const cluster = import.meta.env.VITE_PUSHER_CLUSTER || 'eu';
 

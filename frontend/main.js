@@ -216,9 +216,6 @@ export function openAuthModal(initialTab = 'login') {
 }
 
 // Global listener for auth modal requests
-document.addEventListener('open-clerk-auth', (e) => {
-  openAuthModal(e.detail?.tab || 'login');
-});
 document.addEventListener('open-custom-auth', (e) => {
   openAuthModal(e.detail?.tab || 'login');
 });

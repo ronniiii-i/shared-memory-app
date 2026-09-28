@@ -22,7 +22,7 @@ function iconFor(type) {
   }[type] || 'info';
 }
 
-export function showToast(message, { type = 'info', duration = DEFAULT_DURATION } = {}) {
+function showToast(message, { type = 'info', duration = DEFAULT_DURATION } = {}) {
   const container = getContainer();
   const toast = document.createElement('div');
   const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

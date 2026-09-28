@@ -6,17 +6,31 @@ import { confirmDialog } from './ConfirmDialog.js';
 import { subscribeToAlbum } from '../services/pusher.js';
 import {
   BRUSHES, FONTS, FONT_CATEGORIES, FRAMES, INK_COLORS, PAGE_BACKGROUNDS, PALETTES,
-  PEN_COLORS, PHOTO_FILTERS, SHAPES, STICKERS, BORDER_STYLES,
-  backgroundDefinition, brushDefinition, buildSticker, frameDefinition, hashString,
-  partToFabric, seededRandom, shapeDefinition, stickerDefinition, stickerSvg,
+  PEN_COLORS, PHOTO_FILTERS, SHAPE_FILL, SHAPE_INK, SHAPES, STICKERS, BORDER_STYLES,
+  backgroundDefinition, brushDefinition, buildSticker, clampSides, frameDefinition,
+  hashString, seededRandom, shapeDefinition, shapeSvg, stickerColors,
+  stickerDefinition, stickerSvg,
 } from './scrapbook/geometry.js';
 
-/** Icon per brush, so the picker reads as tools rather than as eight labels. */
+/** How a text box's border is drawn. See `applyTextBorder`. */
+const TEXT_BORDERS = [
+  { id: 'none', label: 'None', hint: 'No border' },
+  { id: 'glyph', label: 'Letters', hint: 'Outline each character' },
+  { id: 'box', label: 'Box', hint: 'A box around the whole text' },
+  { id: 'both', label: 'Both', hint: 'Letters and a box' },
+];
+
+/**
+ * Icon per brush, so the picker reads as tools rather than as eight labels.
+ * Every name here is checked against this build's icon set - `crayon` was not in
+ * it, so the crayon brush rendered with no icon at all and lucide logged a
+ * warning for it on every panel paint.
+ */
 const BRUSH_ICONS = {
   pen: 'pen-line',
   marker: 'highlighter',
   brush: 'brush',
-  crayon: 'crayon',
+  crayon: 'pencil',
   calligraphy: 'feather',
   spray: 'spray-can',
   highlighter: 'highlighter',
@@ -170,16 +184,21 @@ export class ScrapbookWorkspace extends UIComponent {
       this.applyTextStyle({ fontStyle: selection?.fontStyle === 'italic' ? 'normal' : 'italic' });
     });
     this.delegate('click', '.btn-text-align', (event, target) => this.applyTextStyle({ textAlign: target.dataset.textAlign }));
-    this.delegate('click', '.btn-text-color', (event, target) => this.applyTextStyle({ fill: target.dataset.textColor }));
+    this.delegate('click', '.btn-text-color', (event, target) => this.applyTextColor(target.dataset.textColor));
     this.delegate('change', '[data-text-prop]', (event, target) => {
       const value = Number(target.value);
       if (Number.isFinite(value)) this.applyTextStyle({ [target.dataset.textProp]: value });
     });
-    this.delegate('change', '[data-text-color-input]', (event, target) => this.applyTextStyle({ fill: target.value }));
-    this.delegate('click', '.btn-sticker-color', (event, target) => this.recolourSticker(target.dataset.stickerColor));
-    this.delegate('change', '[data-sticker-color-input]', (event, target) => this.recolourSticker(target.value));
-    this.delegate('click', '.btn-sticker-accent', (event, target) => this.recolourSticker(target.dataset.stickerAccent, true));
-    this.delegate('change', '[data-sticker-accent-input]', (event, target) => this.recolourSticker(target.value, true));
+    this.delegate('change', '[data-text-color-input]', (event, target) => this.applyTextColor(target.value));
+    // One swatch row per colour a sticker actually has. The slot index travels
+    // with the control, so the panel does not need a button per colour.
+    this.delegate('click', '.btn-sticker-color', (event, target) => this.recolourStickerSlot(target.dataset.stickerSlot, target.dataset.stickerColor));
+    this.delegate('change', '[data-sticker-color-input]', (event, target) => this.recolourStickerSlot(target.dataset.stickerSlot, target.value));
+    this.delegate('click', '.btn-apply-fill', (event, target) => this.applyFill(target.dataset.fillColor, { slot: target.dataset.slot }));
+    this.delegate('change', '[data-fill-color-input]', (event, target) => this.applyFill(target.value, { slot: target.dataset.slot }));
+    this.delegate('click', '.btn-text-border', (event, target) => this.setTextBorderMode(target.dataset.textBorder));
+    this.delegate('click', '.btn-toggle-border', () => this.toggleBorder());
+    this.delegate('change', '[data-shape-sides]', (event, target) => this.setShapeSides(target.value));
     this.delegate('change', '[data-doodle-color-input]', (event, target) => this.setDoodleColor(target.value));
     this.delegate('click', '.btn-apply-background', (event, target) => this.applyBackground(target.dataset.background));
     this.delegate('click', '.btn-toggle-drawing', () => this.toggleDrawing());
@@ -194,6 +213,7 @@ export class ScrapbookWorkspace extends UIComponent {
     this.delegate('change', '[data-border-color-input]', (event, target) => this.applyBorder({ color: target.value }));
     this.delegate('change', '[data-border-width]', (event, target) => this.applyBorder({ width: Number(target.value) }));
     this.delegate('change', '[data-border-radius]', (event, target) => this.applyBorder({ radius: Number(target.value) }));
+    this.delegate('change', '[data-border-box-padding]', (event, target) => this.applyBorder({ boxPadding: Number(target.value) }));
     this.delegate('click', '.btn-toggle-sticker-rim', () => this.toggleStickerRim());
     this.delegate('change', '[data-sticker-rim-width]', (event, target) => this.applyStickerRim({ width: Number(target.value) }));
     this.delegate('change', '[data-sticker-rim-color]', (event, target) => this.applyStickerRim({ color: target.value }));
@@ -466,18 +486,21 @@ export class ScrapbookWorkspace extends UIComponent {
       image.set({ ...properties, photoId: element.photoId, elementType: 'photo', locked: element.locked });
       this.applyObjectLock(image, element.locked);
       if (properties.filterStyle) this.applyFilterToObject(image, properties.filterStyle);
-      // The frame first, then the author's border edits on top: a page saved as
-      // "Polaroid, then weight 6" has to come back at weight 6, not at whatever
-      // the frame preset happened to use.
-      if (properties.frame) this.applyFrameToObject(image, properties.frame);
+      // An object has one clipPath, so a frame and a torn edge cannot both be
+      // saved; the frame wins, because it is the one that was chosen last by the
+      // only writer that sets both (applyTornToObject clears the frame).
+      if (properties.frame && properties.frame !== 'none') this.applyFrameToObject(image, properties.frame);
+      else if (properties.clipStyle === 'torn') this.applyTornToObject(image);
       this.applyBorderToObject(image, this.savedBorderPatch(properties));
-      if (properties.clipStyle === 'torn') this.applyTornToObject(image);
       this.applyVisibility(image, element);
       return image;
     }
     if (element.type === 'text') {
       const text = new Textbox(properties.text || 'Your memory', { ...properties, elementType: 'text', locked: element.locked });
-      this.applyBorderToObject(text, this.savedBorderPatch(properties));
+      // A text box's border is a mode, not just a stroke, so it is replayed
+      // through the mode-aware path or the box half is lost.
+      if (properties.borderMode) this.applyTextBorderToObject(text, this.savedBorderPatch(properties));
+      else this.applyBorderToObject(text, this.savedBorderPatch(properties));
       this.applyObjectLock(text, element.locked);
       this.applyVisibility(text, element);
       return text;
@@ -487,17 +510,22 @@ export class ScrapbookWorkspace extends UIComponent {
       // are emoji Textboxes and must keep rendering as text, or existing
       // scrapbooks lose their stickers on next open.
       if (properties.stickerId) {
+        // Pages saved before the slot model stored two flat fields; they are
+        // folded into the first two slots so old scrapbooks recolour as before.
+        const legacy = [];
+        if (properties.fill) legacy[0] = properties.fill;
+        if (properties.accentColor) legacy[1] = properties.accentColor;
+        const colors = properties.stickerColors || (legacy.length ? legacy : null);
         const sticker = buildSticker(properties.stickerId, {
-          fill: properties.fill,
-          accentColor: properties.accentColor,
+          colors,
           rim: this.rimSpecFor(properties),
         });
-        const { width, height, ...placement } = properties;
+        const { width, height, stickerColors: _slotField, ...placement } = properties;
         sticker.set({ ...placement, elementType: 'sticker', stickerId: properties.stickerId, locked: element.locked });
-        // The rim arrives with the vector, but a sticker that was hidden or
-        // locked still has to be rebuilt as such.
+        // The rim and the colours arrive with the vector, but a sticker that was
+        // hidden or locked still has to be rebuilt as such.
         sticker.stickerRim = properties.rim ?? false;
-        sticker.accentColor = properties.accentColor ?? null;
+        sticker.stickerColors = stickerColors(stickerDefinition(properties.stickerId), colors).colors;
         this.applyObjectLock(sticker, element.locked);
         this.applyVisibility(sticker, element);
         return sticker;
@@ -520,21 +548,16 @@ export class ScrapbookWorkspace extends UIComponent {
       // them would collapse it to nothing.
       const { width, height, ...placement } = properties;
       const definition = shapeDefinition(properties.shapeId);
-      const shape = definition.build();
+      const shape = definition.build({ sides: properties.shapeSides });
       const size = {
         ...(shape.width ? { width } : {}),
         ...(shape.height ? { height } : {}),
       };
-      shape.set({
-        fill: '#e7b66b',
-        rx: 14,
-        ry: 14,
-        ...placement,
-        ...size,
-        elementType: 'shape',
-        shapeId: properties.shapeId || 'rect',
-        locked: element.locked,
-      });
+      shape.set({ ...placement, ...size, elementType: 'shape', shapeId: properties.shapeId || 'rect', locked: element.locked });
+      // A shape restored with `fill` from the saved properties already has its
+      // colour; this only fills in the outline shapes, which need a stroke.
+      this.applyShapePaint(shape, definition);
+      if (properties.shapeSides) shape.shapeSides = properties.shapeSides;
       this.applyBorderToObject(shape, this.savedBorderPatch(properties));
       this.applyObjectLock(shape, element.locked);
       this.applyVisibility(shape, element);
@@ -629,34 +652,44 @@ export class ScrapbookWorkspace extends UIComponent {
       strokeDashArray: object.strokeDashArray || null,
       rx: object.rx ?? null,
       ry: object.ry ?? null,
-      // A frame is a mat painted behind the object plus an inner rule. fabric
-      // grows the bounding box to fit it, so padding has to be saved too or the
-      // image lands offset inside its own frame on reload.
-      padding: object.padding ?? 0,
-      backgroundColor: object.backgroundColor || null,
+      // A frame is a clip path now, so only the id is worth saving - the
+      // outline is rebuilt against the photo's own box on the way back in.
       frame: object.frame || null,
-      // The panel's border model is these four numbers, not the fabric stroke
-      // alone: the width the author typed is what the slider has to show again,
-      // and a "double" border is a doubled stroke that cannot be inferred from
-      // strokeWidth alone.
+      // The panel's border model is these numbers, not the fabric stroke alone:
+      // the weight the author typed is what the control has to show again, a
+      // "double" border is a doubled stroke that cannot be inferred from
+      // strokeWidth, and an off border is indistinguishable from an unset one
+      // without its own flag.
       borderWidth: object.borderWidth ?? null,
       borderColor: object.borderColor || null,
       borderStyle: object.borderStyle || null,
       borderRadius: object.borderRadius ?? null,
+      borderOn: object.borderOn === true,
       doubleBorder: object.doubleBorder === true,
       strokeUniform: object.strokeUniform === true,
+      // A text border has two halves - an outline on the glyphs and a box round
+      // the block - and either can be on alone. Saving only the stroke lost the
+      // box, and left the panel unable to say which of the two it was editing.
+      borderMode: object.borderMode || null,
+      boxColor: object.boxColor || null,
+      boxPadding: object.boxPadding ?? null,
+      // An outline shape (the line) paints with its stroke, not its fill, and
+      // forgetting that turned it invisible on reload.
+      paintAsStroke: object.paintAsStroke === true,
       filterStyle: object.filterStyle,
       clipStyle: object.clipStyle,
       doodleColor: object.doodleColor,
       brush: object.brush || null,
       shapeId: object.shapeId || null,
+      shapeSides: object.shapeSides ?? null,
     };
     if (type === 'group') properties.objects = object.getObjects().map((child, childIndex) => this.serializeObject(child, childIndex));
     if (type === 'sticker') {
-      // Only the id and swatches are stored - the vector is rebuilt from them,
-      // so the sticker catalogue can grow without touching saved pages.
+      // Only the id, the colour slots and the rim are stored - the vector is
+      // rebuilt from them, so the sticker catalogue can grow without touching
+      // saved pages.
       properties.stickerId = object.stickerId || null;
-      properties.accentColor = object.accentColor || null;
+      properties.stickerColors = Array.isArray(object.stickerColors) ? object.stickerColors : null;
       // The die-cut rim is opt-in, and when it is on its width/colour/style are
       // the same numbers the Border panel edits for every other object.
       properties.rim = object.stickerRim ?? false;
@@ -965,25 +998,132 @@ export class ScrapbookWorkspace extends UIComponent {
     this.recordHistory();
   }
 
-  addShape(shapeId = 'rect') {
+  addShape(shapeId = 'rect', options = {}) {
     if (!this.canvas || this.activePage?.isLocked) return null;
     const definition = shapeDefinition(shapeId);
     // Each catalogue entry builds its own geometry, so a triangle is a Triangle
     // and a speech bubble is a Path - not a rectangle with a different label.
-    const shape = definition.build();
+    const shape = definition.build(options);
     shape.set({
       left: this.canvas.getWidth() / 2,
       top: this.canvas.getHeight() / 2,
-      fill: '#e7b66b',
       originX: 'center',
       originY: 'center',
       elementType: 'shape',
       shapeId: definition.id,
     });
+    this.applyShapePaint(shape, definition);
+    if (definition.sides) shape.shapeSides = clampSides(options.sides ?? definition.sides.value, definition.sides);
     this.canvas.add(shape);
     this.canvas.setActiveObject(shape);
     this.recordHistory();
+    this.refreshInspector();
     return shape;
+  }
+
+  /**
+   * Give a freshly built shape its starting colour.
+   *
+   * Split by kind because an outline shape - the line - has no fill at all, so
+   * setting `fill` on it does nothing and it stays invisible. Every colour
+   * control from here on goes through `applyFill`, which knows the difference.
+   */
+  applyShapePaint(shape, definition) {
+    if (definition?.stroke || shape.fill === null) {
+      shape.set({ fill: null, stroke: SHAPE_INK, strokeWidth: shape.strokeWidth || 10, strokeLineCap: 'round' });
+      shape.paintAsStroke = true;
+    } else {
+      shape.set({ fill: SHAPE_FILL, rx: shape.rx ?? 0, ry: shape.ry ?? 0 });
+      shape.paintAsStroke = false;
+    }
+    // A new shape has no border, and saying so is not optional. fabric's default
+    // `strokeWidth` is 1, so a shape that has never had a border still *measures*
+    // as one, and the panel opened showing "On" with a weight of 1.
+    if (shape.borderOn === undefined) shape.borderOn = false;
+    return shape;
+  }
+
+  /**
+   * Recolour the selection.
+   *
+   * One entry point for the swatch rows, because "the colour of this thing" is
+   * the same question for a shape, a photo frame's mat, a doodle and text - the
+   * only variation is whether the object paints with a fill or a stroke.
+   */
+  applyFill(color, options = {}) {
+    const targets = this.getSelectedObjects();
+    if (!targets.length || this.activePage?.isLocked) return;
+    for (const object of targets) {
+      if (object.type === 'group' || object.elementType === 'group') continue;
+      if (object.elementType === 'sticker') {
+        if (options.slot === undefined) continue;
+        this.recolourStickerSlot(options.slot, color);
+        continue;
+      }
+      if (object.paintAsStroke || object.fill === null) {
+        object.set({ stroke: color, paintAsStroke: true });
+      } else {
+        object.set({ fill: color });
+        // A Textbox caches its measured size, so recolouring one without a
+        // re-measure leaves the box at the old metrics and the new colour
+        // renders against a stale width.
+        if (typeof object.initDimensions === 'function') object.initDimensions();
+      }
+      object.setCoords();
+    }
+    this.canvas.requestRenderAll();
+    this.commitChange();
+  }
+
+  /**
+   * Change a polygon's side count in place.
+   *
+   * Rebuilt rather than mutated because the geometry *is* the side count: a
+   * Polygon has no sides property to set. Placement, size, rotation, paint and
+   * border are carried across, so the shape does not jump.
+   */
+  setShapeSides(sides) {
+    const object = this.getSelectedObject();
+    if (!object || object.elementType !== 'shape' || this.activePage?.isLocked) return;
+    const definition = shapeDefinition(object.shapeId);
+    if (!definition.sides) return;
+    const count = clampSides(sides, definition.sides);
+    const index = this.canvas.getObjects().indexOf(object);
+    if (index < 0) return;
+
+    const rebuilt = definition.build({ sides: count });
+    rebuilt.set({
+      left: object.left,
+      top: object.top,
+      scaleX: object.scaleX,
+      scaleY: object.scaleY,
+      angle: object.angle,
+      flipX: object.flipX,
+      flipY: object.flipY,
+      opacity: object.opacity,
+      visible: object.visible,
+      originX: object.originX,
+      originY: object.originY,
+      elementType: 'shape',
+      shapeId: definition.id,
+      shapeSides: count,
+      paintAsStroke: object.paintAsStroke,
+    });
+    if (object.paintAsStroke) rebuilt.set({ fill: null, stroke: object.stroke, strokeWidth: object.strokeWidth });
+    else rebuilt.set({ fill: object.fill });
+    this.applyBorderToObject(rebuilt, this.savedBorderPatch({
+      borderWidth: object.borderWidth,
+      borderColor: object.borderColor,
+      borderStyle: object.borderStyle,
+      borderRadius: object.borderRadius,
+    }));
+    if (object.locked) this.applyObjectLock(rebuilt, true);
+    rebuilt.setCoords();
+
+    this.canvas.remove(object);
+    this.canvas.insertAt(index, rebuilt);
+    this.canvas.setActiveObject(rebuilt);
+    this.commitChange();
   }
 
   /**
@@ -1033,41 +1173,51 @@ export class ScrapbookWorkspace extends UIComponent {
     if (Number.isFinite(properties.borderWidth)) patch.width = properties.borderWidth;
     if (properties.borderColor) patch.color = properties.borderColor;
     if (Number.isFinite(properties.borderRadius)) patch.radius = properties.borderRadius;
-    // `doubleBorder` is not needed here: the style id alone is enough, since
-    // BORDER_STYLES says whether that style is a double one.
+    // `borderOn` is the explicit state, both ways. It is replayed because a
+    // width of 0 alone cannot tell a switched-off border from a border that was
+    // never set, and fabric's default strokeWidth of 1 cannot either.
+    if (properties.borderOn === true) patch.on = true;
+    if (properties.borderOn === false) patch.on = false;
+    if (properties.borderMode) patch.mode = properties.borderMode;
+    if (properties.boxColor) patch.boxColor = properties.boxColor;
+    if (Number.isFinite(properties.boxPadding)) patch.boxPadding = properties.boxPadding;
     return patch;
   }
 
   /**
-   * Paint a frame behind an object: a mat in `backgroundColor` plus a uniform
-   * padding, with the rule drawn on the object's own stroke.
+   * Cut the photo to a shape, the way a real mount does.
    *
-   * fabric includes padding in the bounding box, so the frame is part of what
-   * gets selected, dragged and exported - which is what makes it a frame rather
-   * than a decoration that the image slides out of.
+   * The previous frame was a mat behind the photo plus a rule around it, which
+   * is a border under another name - and the user was right to call that a no
+   * no. A frame clips: the heart frame shows a heart, not a square photo with a
+   * line round it.
+   *
+   * The clip is built against the photo's own box and installed as its
+   * `clipPath`, in the image's local coordinates. Two consequences worth stating:
+   *
+   * - An object has exactly one clipPath, so a frame and a torn edge cannot
+   *   coexist. Applying either clears the other.
+   * - A stroke on a clipped photo is either invisible or traces a rectangle the
+   *   photo no longer has, so a frame and a border are mutually exclusive too.
    */
   applyFrameToObject(object, frameId) {
     const frame = frameDefinition(frameId);
-    object.set({
-      padding: frame.pad,
-      backgroundColor: frame.mat || null,
-    });
-    object.frame = frame.id;
-    if (frame.border) {
-      const style = BORDER_STYLES.find((item) => item.id === (frame.border.style || 'solid')) || BORDER_STYLES[0];
-      object.set({
-        stroke: frame.border.color,
-        strokeWidth: style.double ? frame.border.width * 2.4 : frame.border.width,
-        strokeDashArray: style.dash,
-        strokeUniform: true,
-        borderWidth: frame.border.width,
-        borderColor: frame.border.color,
-        borderStyle: style.id,
-        doubleBorder: !!style.double,
-      });
-    } else {
-      object.set({ stroke: null, strokeWidth: 0, strokeDashArray: null, doubleBorder: false });
+    const width = object.width || 300;
+    const height = object.height || 200;
+    if (frame.id === 'none') {
+      object.clipPath = null;
+      object.frame = null;
+      object.clipStyle = null;
+      object.setCoords();
+      return object;
     }
+    object.clipPath = frame.build(width, height);
+    object.frame = frame.id;
+    // The old mat is dropped rather than left behind: `padding` grows the
+    // bounding box, so a stale value would leave an invisible margin the author
+    // cannot select or clear.
+    object.set({ padding: 0, backgroundColor: null });
+    this.clearBorderOn(object);
     object.setCoords();
     return object;
   }
@@ -1094,8 +1244,126 @@ export class ScrapbookWorkspace extends UIComponent {
     const targets = this.getSelectedObjects();
     if (!targets.length || this.activePage?.isLocked) return;
     for (const object of targets) {
-      this.applyBorderToObject(object, patch);
+      // A border and a frame are exclusive, so asking for one gives up the
+      // other rather than leaving a stroke tracing a shape the photo is no
+      // longer. Nothing is silently ignored.
+      if (object.frame) this.applyFrameToObject(object, 'none');
+      if (typeof object.text === 'string') this.applyTextBorderToObject(object, patch);
+      else this.applyBorderToObject(object, patch);
     }
+    this.canvas.requestRenderAll();
+    this.commitChange();
+  }
+
+  /**
+   * Turn the border off, or back on at the weight it had.
+   *
+   * Setting the weight to 0 is the only way a border could be removed before,
+   * and that is not an intuition anybody has. This keeps the previous weight so
+   * the toggle is reversible, and remembers the off state separately - a width
+   * of 0 is indistinguishable from "never had one", so without a flag the
+   * toggle could not tell off from unset.
+   */
+  toggleBorder() {
+    const targets = this.getSelectedObjects();
+    if (!targets.length || this.activePage?.isLocked) return;
+    for (const object of targets) {
+      if (object.type === 'group' || object.elementType === 'group') continue;
+      if (typeof object.text === 'string') {
+        const current = object.borderMode || 'none';
+        const next = current === 'none' ? (object.lastBorderMode || 'glyph') : 'none';
+        this.applyTextBorderToObject(object, { mode: next });
+        continue;
+      }
+      if (object.borderOn === false) {
+        this.applyBorderToObject(object, { width: object.lastBorderWidth || 3, on: true });
+      } else {
+        object.lastBorderWidth = object.borderWidth || object.strokeWidth || 3;
+        this.applyBorderToObject(object, { on: false });
+      }
+    }
+    this.canvas.requestRenderAll();
+    this.commitChange();
+  }
+
+  /** Strip a border without recording it as the author's last choice. */
+  clearBorderOn(object) {
+    object.set({ stroke: null, strokeWidth: 0, strokeDashArray: null });
+    object.borderWidth = 0;
+    object.borderOn = false;
+    object.doubleBorder = false;
+    return object;
+  }
+
+  /**
+   * A text box's border has two independent halves, and the panel exposes both.
+   *
+   * A stroke on a Textbox traces each glyph, which is a "sticker text" look; a
+   * `backgroundColor` with padding draws a box round the whole block, which is
+   * a label. The old panel could only ever do the first, and turned it on
+   * without ever saying what it was doing.
+   */
+  applyTextBorderToObject(object, patch = {}) {
+    const mode = patch.mode ?? object.borderMode ?? 'glyph';
+    const width = patch.width ?? (object.borderWidth || 3);
+    const color = patch.color ?? object.borderColor ?? object.stroke ?? '#2f241e';
+    const style = BORDER_STYLES.find((item) => item.id === (patch.style ?? object.borderStyle)) || BORDER_STYLES[0];
+    const glyphs = mode === 'glyph' || mode === 'both';
+    const box = mode === 'box' || mode === 'both';
+
+    if (glyphs) {
+      object.set({
+        stroke: color,
+        strokeWidth: style.double ? width * 2.4 : width,
+        strokeDashArray: style.dash,
+        strokeUniform: true,
+        // fabric would otherwise draw half the stroke inside the glyph, which
+        // thins the letters as well as outlining them.
+        paintFirst: 'stroke',
+      });
+    } else {
+      object.set({ stroke: null, strokeWidth: 0, strokeDashArray: null, paintFirst: 'fill' });
+    }
+
+    if (box) {
+      const padding = Math.max(0, Number(patch.boxPadding ?? object.boxPadding ?? 8) || 0);
+      object.set({ backgroundColor: patch.boxColor ?? object.boxColor ?? color, padding });
+    } else {
+      object.set({ backgroundColor: null, padding: 0 });
+    }
+
+    object.borderMode = mode;
+    object.borderWidth = width;
+    object.borderColor = color;
+    object.borderStyle = style.id;
+    object.borderOn = mode !== 'none';
+    object.boxColor = box ? (patch.boxColor ?? object.boxColor ?? color) : null;
+    // Deliberately *not* zeroed when the box is off. The padding is the last
+    // value the author chose, and zeroing it meant the first "box" border came
+    // out hugging the letters with no gap at all - because `0` is not nullish,
+    // the `?? 8` default never got a chance to apply.
+    if (box) object.boxPadding = Number(patch.boxPadding ?? object.boxPadding ?? 8);
+    object.doubleBorder = glyphs && !!style.double;
+    if (mode !== 'none') object.lastBorderMode = mode;
+    object.setCoords();
+    return object;
+  }
+
+  /** Set the text border mode straight from the panel. */
+  setTextBorderMode(mode) {
+    const object = this.getSelectedText();
+    if (!object || this.activePage?.isLocked) return;
+    this.applyTextBorderToObject(object, { mode });
+    this.canvas.requestRenderAll();
+    this.commitChange();
+  }
+
+  /** Recolour a text box's ink - the "colour" question for a text selection. */
+  applyTextColor(color) {
+    const object = this.getSelectedText();
+    if (!object || this.activePage?.isLocked) return;
+    object.set({ fill: color });
+    if (typeof object.initDimensions === 'function') object.initDimensions();
     this.canvas.requestRenderAll();
     this.commitChange();
   }
@@ -1110,6 +1378,8 @@ export class ScrapbookWorkspace extends UIComponent {
    */
   applyBorderToObject(object, patch = {}) {
     if (!object || object.type === 'group' || object.elementType === 'group') return object;
+    if (patch.on === false) return this.clearBorderOn(object);
+    if (patch.on === true) object.borderOn = true;
     if (patch.style !== undefined) {
       const style = BORDER_STYLES.find((item) => item.id === patch.style) || BORDER_STYLES[0];
       // fabric has no double stroke, so a double border is faked with a stroke
@@ -1130,6 +1400,10 @@ export class ScrapbookWorkspace extends UIComponent {
       const base = object.doubleBorder ? width / 2.4 : width;
       object.set({ strokeWidth: base });
       object.borderWidth = width;
+      // Setting a positive weight *is* asking for a border, whether or not the
+      // toggle was already on. Anything else leaves the flag alone, so changing
+      // the colour of an off border does not silently switch it back on.
+      if (width > 0) object.borderOn = true;
     }
     if (patch.color !== undefined) {
       object.set({ stroke: patch.color });
@@ -1155,8 +1429,7 @@ export class ScrapbookWorkspace extends UIComponent {
     const index = this.canvas.getObjects().indexOf(sticker);
     if (index < 0) return null;
     const rebuilt = buildSticker(sticker.stickerId, {
-      fill: sticker.fill,
-      accentColor: sticker.accentColor,
+      colors: sticker.stickerColors,
       scale: 1,
       rim: this.rimSpecFor({ rim: sticker.stickerRim }),
     });
@@ -1172,8 +1445,7 @@ export class ScrapbookWorkspace extends UIComponent {
       visible: sticker.visible,
       elementType: 'sticker',
       stickerId: sticker.stickerId,
-      fill: sticker.fill,
-      accentColor: sticker.accentColor,
+      stickerColors: sticker.stickerColors,
       stickerRim: sticker.stickerRim,
       locked: sticker.locked,
     });
@@ -1319,24 +1591,31 @@ export class ScrapbookWorkspace extends UIComponent {
   }
 
   /**
-   * Recolour a sticker.
+   * Recolour one of a sticker's colour slots.
    *
-   * `accent` picks which of the two swatches is being edited, so the flower's
-   * centre can be a different colour from its petals without the panel needing
-   * two different buttons.
+   * A sticker is not two colours: the cherries are red fruit on green stems, the
+   * cake has icing and sponge and a cherry. The panel used to offer a fill and
+   * an accent, which left every other colour frozen at whatever the catalogue
+   * said. The slot list comes from the definition, and the whole vector is
+   * rebuilt so the parts that share a slot move together and the rim survives.
    */
-  recolourSticker(color, isAccent = false) {
+  recolourStickerSlot(slot, color) {
     if (!this.canvas || this.activePage?.isLocked) return;
     const sticker = this.getSelectedObjects().find((object) => object.elementType === 'sticker');
     if (!sticker?.stickerId) return;
+    const at = Number(slot);
+    // Loudly, not silently. A swatch whose slot did not reach the handler used
+    // to do nothing at all, which is indistinguishable from a broken control.
+    if (!Number.isInteger(at) || at < 0) {
+      toast.error('Could not work out which colour to change. Try picking it again.');
+      return;
+    }
 
-    // Rebuild from the definition rather than patching fills in place: some
-    // stickers have an accent part that must keep its own colour, and
-    // hand-tracking which part is which is exactly the kind of thing that
-    // drifts. The rebuild also carries the rim across, so recolouring a
-    // stickered sticker does not silently strip its die-cut edge.
-    sticker.fill = isAccent ? sticker.fill : color;
-    sticker.accentColor = isAccent ? color : sticker.accentColor;
+    const definition = stickerDefinition(sticker.stickerId);
+    const current = stickerColors(definition, sticker.stickerColors).colors;
+    const next = current.slice();
+    next[at] = color;
+    sticker.stickerColors = next;
     const rebuilt = this.rebuildSticker(sticker);
     if (!rebuilt) return;
     this.canvas.setActiveObject(rebuilt);
@@ -1967,6 +2246,10 @@ export class ScrapbookWorkspace extends UIComponent {
     ].join('|'));
     const tornPath = buildTornPath(width, height, seed);
     tornPath.absolutePositioned = false;
+    // The tear is also a clip path, and an object has exactly one. A frame that
+    // is already on would be silently overwritten, so it is cleared here and
+    // the two are honestly exclusive rather than one quietly winning.
+    object.frame = null;
     object.set({ clipPath: tornPath, objectCaching: true, dirty: true });
     object.setCoords();
   }
@@ -1981,6 +2264,7 @@ export class ScrapbookWorkspace extends UIComponent {
         this.applyTornToObject(object);
       } else {
         object.clipStyle = null;
+        object.frame = null;
         object.clipPath = undefined;
         object.set({ dirty: true });
         object.setCoords();
@@ -2051,6 +2335,9 @@ export class ScrapbookWorkspace extends UIComponent {
           stage.classList.remove(...PAGE_BACKGROUNDS.map((item) => item.className));
           stage.classList.add(background.className);
         }
+        // The picker's own active state is rendered from `activePage.background`,
+        // so without this the chosen paper only looked chosen after a reload.
+        this.refreshInspector();
         toast.success(`${background.label} paper.`);
       })
       .catch((err) => toast.error(`Could not change the paper: ${err.message}`));
@@ -2189,21 +2476,26 @@ export class ScrapbookWorkspace extends UIComponent {
    * The native input is labelled by a swatch rather than shown as an OS widget,
    * so the picker matches the presets beside it - but it is still a real
    * `<input type=color>`, so the OS picker, the eyedropper and keyboard entry all
-   * work. Eight palettes is a lot of swatches for a 320px rail, so they are
-   * grouped by name instead of run together as one undifferentiated block.
+   * work.
+   *
+   * "Is the current colour one of the presets?" is answered against `PALETTES`,
+   * the same list the swatches are built from, rather than against a second
+   * list passed in by the caller. Two lists is how a swatch ended up marked
+   * active *and* the custom picker next to it showing a different colour.
    */
-  renderSwatches({ className, dataAttribute, colors, active, disabled, inputAttribute }) {
-    const custom = active && !colors.includes(active);
+  renderSwatches({ className, dataAttribute, active, disabled, inputAttribute, buttonAttribute }) {
+    const presets = PALETTES.flatMap((palette) => palette.colors);
+    const custom = !!active && !presets.includes(active);
     return `
       ${PALETTES.map((palette) => `
         <div class="scrapbook-swatch-row" role="group" aria-label="${palette.label}">
-          ${palette.colors.map((color) => `<button class="${className} color-swatch ${active === color ? 'is-active' : ''}" ${dataAttribute}="${color}" style="--swatch-color: ${color}" ${disabled ? 'disabled' : ''} aria-label="${color}" title="${color}"></button>`).join('')}
+          ${palette.colors.map((color) => `<button class="${className} color-swatch ${active === color ? 'is-active' : ''}" ${dataAttribute}="${color}" ${buttonAttribute || ''} style="--swatch-color: ${color}" ${disabled ? 'disabled' : ''} aria-label="${color}" title="${color}"></button>`).join('')}
         </div>
       `).join('')}
       <div class="scrapbook-swatch-row scrapbook-swatch-row-custom">
-        <label class="color-swatch color-swatch-custom ${custom ? 'is-active' : ''}" style="--swatch-color: ${custom ? active : 'conic-gradient(from 0deg, #c85a32, #e0a23c, #3f9b69, #3f7fd4, #8a6bb8, #c85a32)'}" title="Pick any colour">
+        <label class="color-swatch color-swatch-custom ${custom ? 'is-active' : ''}" style="--swatch-color: ${custom ? active : 'conic-gradient(from 0deg, #c85a32, #e0a23c, #3f9b69, #3f7fd4, #8a6bb8, #c85a32)'}" title="${custom ? `${active} - pick another` : 'Pick any colour'}">
           <i data-lucide="pipette"></i>
-          <input type="color" ${inputAttribute} value="${custom ? active : '#c85a32'}" ${disabled ? 'disabled' : ''} aria-label="Pick any colour">
+          <input type="color" ${inputAttribute} value="${custom ? active : (presets.includes(active) ? active : '#c85a32')}" ${disabled ? 'disabled' : ''} aria-label="Pick any colour" title="${custom || presets.includes(active) ? active : ''}">
         </label>
       </div>
     `;
@@ -2265,9 +2557,11 @@ export class ScrapbookWorkspace extends UIComponent {
         </section>
 
         <section class="scrapbook-panel-section">
-          <h3>Shapes</h3>
+          <div class="scrapbook-panel-heading">
+            <div><h3>Shapes</h3><p>Each button shows the shape it actually places.</p></div>
+          </div>
           <div class="scrapbook-shape-grid">
-            ${SHAPES.map((shape) => `<button class="btn-add-shape scrapbook-shape-option" data-shape="${shape.id}" ${locked ? 'disabled' : ''} title="${shape.label}" aria-label="Add ${shape.label}"><i data-lucide="${shape.icon}"></i><span>${shape.label}</span></button>`).join('')}
+            ${SHAPES.map((shape) => `<button class="btn-add-shape scrapbook-shape-option" data-shape="${shape.id}" ${locked ? 'disabled' : ''} title="${shape.label}" aria-label="Add ${shape.label}">${shapeSvg(shape)}<span>${shape.label}</span></button>`).join('')}
           </div>
         </section>
 
@@ -2325,18 +2619,31 @@ export class ScrapbookWorkspace extends UIComponent {
         </section>
 
         <section class="scrapbook-panel-section">
-          <h3>Ink</h3>
+          <div class="scrapbook-panel-heading">
+            <div><h3>Ink</h3><p>The colour of the letters themselves.</p></div>
+          </div>
           <div class="scrapbook-swatch-stack">
             ${this.renderSwatches({
               className: 'btn-text-color',
               dataAttribute: 'data-text-color',
-              colors: INK_COLORS,
               active: selection?.fill,
               disabled: !ready,
               inputAttribute: 'data-text-color-input',
             })}
           </div>
         </section>
+
+        ${selection ? `
+          <section class="scrapbook-panel-section">
+            <div class="scrapbook-panel-heading">
+              <div><h3>Border</h3><p>Around the letters, round the box, or both.</p></div>
+              <button class="btn-toggle-border tool-button ${(selection.borderMode || 'none') !== 'none' ? 'is-active' : ''}" ${locked ? 'disabled' : ''} role="switch" aria-checked="${(selection.borderMode || 'none') !== 'none' ? 'true' : 'false'}" title="Toggle the border"><i data-lucide="${(selection.borderMode || 'none') !== 'none' ? 'toggle-right' : 'toggle-left'}"></i><span>${(selection.borderMode || 'none') !== 'none' ? 'On' : 'Off'}</span></button>
+            </div>
+            <div class="scrapbook-button-grid scrapbook-button-grid-tight">
+              ${TEXT_BORDERS.map((option) => `<button class="btn-text-border tool-button ${(selection.borderMode || 'none') === option.id ? 'is-active' : ''}" data-text-border="${option.id}" ${locked ? 'disabled' : ''} title="${option.hint}">${option.label}</button>`).join('')}
+            </div>
+          </section>
+        ` : ''}
       </div>
     `;
   }
@@ -2348,13 +2655,60 @@ export class ScrapbookWorkspace extends UIComponent {
     // A sticker's edge is its rim, and the rim is the sticker's own stroke, so
     // editing it as a border would double it up. It has its own panel instead.
     if (object.elementType === 'sticker') return null;
+    // A text box is not a single border either - see applyTextBorderToObject.
+    if (typeof object.text === 'string') {
+      return {
+        width: Number(object.borderWidth ?? 3),
+        color: object.borderColor || object.stroke || '#2f241e',
+        style: object.borderStyle || 'solid',
+        radius: 0,
+        roundable: false,
+        mode: object.borderMode || 'none',
+        hasBorder: object.borderOn === true && (object.borderMode || 'none') !== 'none',
+        boxColor: object.boxColor || object.borderColor || object.stroke || '#2f241e',
+        boxPadding: Number(object.boxPadding ?? 8),
+        isText: true,
+      };
+    }
     return {
-      width: Number(object.borderWidth ?? object.strokeWidth ?? 0),
+      width: Number(object.borderWidth ?? 3),
       color: object.borderColor || object.stroke || '#2f241e',
       style: object.borderStyle || 'solid',
       radius: Number(object.borderRadius ?? (object.type === 'rect' ? object.rx ?? 0 : 0)),
       roundable: object.type === 'rect',
-      hasBorder: (object.strokeWidth ?? 0) > 0,
+      // `borderOn` is the whole truth. Inferring it from `strokeWidth` looked
+      // right until fabric's default of 1 made every untouched shape read as
+      // "border on, weight 1".
+      hasBorder: object.borderOn === true,
+      mode: null,
+      isText: false,
+    };
+  }
+
+  /**
+   * The colour the selection currently paints with.
+   *
+   * An outline shape - the line - has no fill, so its colour lives on the
+   * stroke; everything else paints with the fill. Text is a fill too, which is
+   * why recolouring text and recolouring a shape are the same question.
+   */
+  getPaintState() {
+    const object = this.getSelectedObject();
+    if (!object || object.type === 'group' || object.elementType === 'group') return null;
+    if (object.elementType === 'sticker') return null;
+    if (object.paintAsStroke || object.fill === null) {
+      return { color: object.stroke || SHAPE_INK, asStroke: true, label: 'Ink', hint: 'This shape is drawn as a line.' };
+    }
+    // "Fill" is the word for a shape, but a text box's fill is its ink, and a
+    // doodle's is its pen colour. Calling all three "Fill" left the author
+    // guessing which was being changed.
+    const isText = typeof object.text === 'string';
+    const isDoodle = !!(object.elementType === 'doodle' || object.path);
+    return {
+      color: object.fill || SHAPE_FILL,
+      asStroke: false,
+      label: isText ? 'Ink' : isDoodle ? 'Pen colour' : 'Fill',
+      hint: isText ? 'The colour of the letters.' : isDoodle ? 'The colour of the stroke.' : 'The main colour.',
     };
   }
 
@@ -2372,10 +2726,18 @@ export class ScrapbookWorkspace extends UIComponent {
     };
   }
 
+  /** A selected sticker's editable colours, one entry per slot. */
+  getStickerColors() {
+    const sticker = this.getSelectedObjects().find((object) => object.elementType === 'sticker');
+    if (!sticker?.stickerId) return null;
+    return stickerColors(stickerDefinition(sticker.stickerId), sticker.stickerColors);
+  }
+
   renderStickersPanel() {
     const locked = this.activePage.isLocked;
     const selection = this.getSelectedObjects().find((object) => object.elementType === 'sticker');
     const rim = this.getRimState();
+    const slots = this.getStickerColors();
     return `
       <div class="scrapbook-panel">
         <p class="scrapbook-panel-hint">${selection ? 'Recolour the selected sticker.' : 'Pick a sticker to drop it on the page.'}</p>
@@ -2385,32 +2747,30 @@ export class ScrapbookWorkspace extends UIComponent {
           </div>
         </section>
 
-        ${selection ? `
+        ${selection && slots ? `
           <section class="scrapbook-panel-section">
-            <h3>Colour</h3>
-            <div class="scrapbook-swatch-stack">
-              ${this.renderSwatches({
-                className: 'btn-sticker-color',
-                dataAttribute: 'data-sticker-color',
-                colors: INK_COLORS,
-                active: selection.fill,
-                disabled: locked,
-                inputAttribute: 'data-sticker-color-input',
-              })}
+            <div class="scrapbook-panel-heading">
+              <div><h3>Colour</h3><p>${slots.count === 1 ? 'One colour on this sticker.' : `${slots.count} colours - every one is editable.`}</p></div>
             </div>
-            ${selection.accentColor ? `
-              <h3 class="scrapbook-subhead">Detail</h3>
-              <div class="scrapbook-swatch-stack">
-                ${this.renderSwatches({
-                  className: 'btn-sticker-accent',
-                  dataAttribute: 'data-sticker-accent',
-                  colors: INK_COLORS,
-                  active: selection.accentColor,
-                  disabled: locked,
-                  inputAttribute: 'data-sticker-accent-input',
-                })}
+            ${slots.labels.map((label, slot) => `
+              <div class="scrapbook-slot">
+                <h4 class="scrapbook-slot-label">${escapeHtml(label)}</h4>
+                <div class="scrapbook-swatch-stack">
+                  ${this.renderSwatches({
+                    className: 'btn-sticker-color',
+                    dataAttribute: 'data-sticker-color',
+                    // The slot index has to be on the *button*, not just the
+                    // colour input: the button is what the click delegate sees,
+                    // and without it every swatch arrived with an undefined slot
+                    // and the recolour was dropped without a word.
+                    buttonAttribute: `data-sticker-slot="${slot}"`,
+                    active: slots.colors[slot],
+                    disabled: locked,
+                    inputAttribute: `data-sticker-color-input data-sticker-slot="${slot}"`,
+                  })}
+                </div>
               </div>
-            ` : ''}
+            `).join('')}
           </section>
 
           <section class="scrapbook-panel-section">
@@ -2438,6 +2798,9 @@ export class ScrapbookWorkspace extends UIComponent {
     const selected = this.getSelectedObjects();
     const photo = selected.find((object) => object.elementType === 'photo');
     const border = this.getBorderState();
+    const paint = this.getPaintState();
+    const shape = selected.find((object) => object.elementType === 'shape');
+    const sides = shape ? shapeDefinition(shape.shapeId).sides : null;
     const brush = brushDefinition(this.brush);
     return `
       <div class="scrapbook-panel">
@@ -2452,44 +2815,89 @@ export class ScrapbookWorkspace extends UIComponent {
           </section>
 
           <section class="scrapbook-panel-section">
-            <h3>Frame</h3>
+            <div class="scrapbook-panel-heading">
+              <div><h3>Frame</h3><p>Cuts the photo to a shape. Replaces the border.</p></div>
+            </div>
             <div class="scrapbook-look-grid">
               ${FRAMES.map((frame) => `<button class="btn-apply-frame scrapbook-look-option ${photo.frame === frame.id ? 'is-active' : ''}" data-frame="${frame.id}" ${locked ? 'disabled' : ''} title="${frame.label}" aria-pressed="${photo.frame === frame.id}">${frame.label}</button>`).join('')}
             </div>
           </section>
 
           <section class="scrapbook-panel-section">
-            <h3>Edge</h3>
+            <div class="scrapbook-panel-heading">
+              <div><h3>Edge</h3><p>A torn edge is also a cut, so it replaces the frame.</p></div>
+            </div>
             <div class="scrapbook-button-grid">
               <button class="btn-apply-torn tool-button ${photo.clipStyle === 'torn' ? 'is-active' : ''}" ${locked ? 'disabled' : ''}><i data-lucide="scissors"></i><span>${photo.clipStyle === 'torn' ? 'Torn' : 'Tear edge'}</span></button>
             </div>
           </section>
         ` : ''}
 
+        ${paint ? `
+          <section class="scrapbook-panel-section">
+            <div class="scrapbook-panel-heading">
+              <div><h3>${escapeHtml(paint.label)}</h3><p>${escapeHtml(paint.hint)}</p></div>
+            </div>
+            ${this.renderSwatches({
+              className: 'btn-apply-fill',
+              dataAttribute: 'data-fill-color',
+              active: paint.color,
+              disabled: locked,
+              inputAttribute: 'data-fill-color-input',
+            })}
+          </section>
+        ` : ''}
+
+        ${sides ? `
+          <section class="scrapbook-panel-section">
+            <h3>Sides</h3>
+            <label class="scrapbook-field scrapbook-field-wide">
+              <span>${sides.min}&ndash;${sides.max} sides</span>
+              <input class="scrapbook-range" type="range" min="${sides.min}" max="${sides.max}" step="${sides.step || 1}" value="${clampSides(shape.shapeSides ?? sides.value, sides)}" data-shape-sides ${locked ? 'disabled' : ''}>
+            </label>
+            <p class="scrapbook-panel-hint">Currently ${clampSides(shape.shapeSides ?? sides.value, sides)} sides.</p>
+          </section>
+        ` : ''}
+
         ${border ? `
           <section class="scrapbook-panel-section">
             <div class="scrapbook-panel-heading">
-              <div><h3>Border</h3><p>${border.roundable ? 'Weight, ink, dash and corners.' : 'Weight, ink and dash.'}</p></div>
-              <span class="scrapbook-tag ${border.hasBorder ? 'is-on' : ''}">${border.hasBorder ? 'On' : 'Off'}</span>
+              <div>
+                <h3>Border</h3>
+                <p>${border.isText ? 'Around the letters, round the box, or both.' : (border.roundable ? 'Weight, ink, dash and corners.' : 'Weight, ink and dash.')}</p>
+              </div>
+              <button class="btn-toggle-border tool-button ${border.hasBorder ? 'is-active' : ''}" ${locked ? 'disabled' : ''} role="switch" aria-checked="${border.hasBorder ? 'true' : 'false'}" title="${border.hasBorder ? 'Remove the border' : 'Add a border'}"><i data-lucide="${border.hasBorder ? 'toggle-right' : 'toggle-left'}"></i><span>${border.hasBorder ? 'On' : 'Off'}</span></button>
             </div>
-            <div class="scrapbook-field-row">
-              <label class="scrapbook-field"><span>Weight</span><input class="scrapbook-number" type="number" min="0" max="40" step="1" value="${Math.round(border.width)}" data-border-width ${locked ? 'disabled' : ''}></label>
-              <label class="scrapbook-field scrapbook-field-color"><span>Ink</span><input class="scrapbook-color-input" type="color" value="${escapeAttr(/^#[0-9a-f]{6}$/i.test(border.color) ? border.color : '#2f241e')}" data-border-color-input ${locked ? 'disabled' : ''}></label>
-              ${border.roundable ? `<label class="scrapbook-field"><span>Corner</span><input class="scrapbook-number" type="number" min="0" max="200" step="1" value="${Math.round(border.radius)}" data-border-radius ${locked ? 'disabled' : ''}></label>` : ''}
-            </div>
-            <div class="scrapbook-button-grid scrapbook-button-grid-tight">
-              ${BORDER_STYLES.map((style) => `<button class="btn-border-style tool-button ${border.style === style.id ? 'is-active' : ''}" data-border-style="${style.id}" ${locked ? 'disabled' : ''}>${style.label}</button>`).join('')}
-            </div>
-            <div class="scrapbook-swatch-stack">
-              ${this.renderSwatches({
-                className: 'btn-border-color',
-                dataAttribute: 'data-border-color',
-                colors: PALETTES.flatMap((palette) => palette.colors),
-                active: border.color,
-                disabled: locked,
-                inputAttribute: 'data-border-color-input',
-              })}
-            </div>
+            ${border.isText ? `
+              <div class="scrapbook-button-grid scrapbook-button-grid-tight">
+                ${TEXT_BORDERS.map((option) => `<button class="btn-text-border tool-button ${border.mode === option.id ? 'is-active' : ''}" data-text-border="${option.id}" ${locked ? 'disabled' : ''} title="${option.hint}">${option.label}</button>`).join('')}
+              </div>
+            ` : ''}
+            ${border.hasBorder ? `
+              <div class="scrapbook-field-row">
+                <label class="scrapbook-field"><span>Weight</span><input class="scrapbook-number" type="number" min="1" max="40" step="1" value="${Math.max(1, Math.round(border.width))}" data-border-width ${locked ? 'disabled' : ''}></label>
+                <label class="scrapbook-field scrapbook-field-color"><span>Ink</span><input class="scrapbook-color-input" type="color" value="${escapeAttr(/^#[0-9a-f]{6}$/i.test(border.color) ? border.color : '#2f241e')}" data-border-color-input ${locked ? 'disabled' : ''}></label>
+                ${border.roundable ? `<label class="scrapbook-field"><span>Corner</span><input class="scrapbook-number" type="number" min="0" max="200" step="1" value="${Math.round(border.radius)}" data-border-radius ${locked ? 'disabled' : ''}></label>` : ''}
+              </div>
+              <div class="scrapbook-button-grid scrapbook-button-grid-tight">
+                ${BORDER_STYLES.map((style) => `<button class="btn-border-style tool-button ${border.style === style.id ? 'is-active' : ''}" data-border-style="${style.id}" ${locked ? 'disabled' : ''}>${style.label}</button>`).join('')}
+              </div>
+              ${border.isText && (border.mode === 'box' || border.mode === 'both') ? `
+                <div class="scrapbook-field-row">
+                  <label class="scrapbook-field scrapbook-field-color"><span>Box</span><input class="scrapbook-color-input" type="color" value="${escapeAttr(/^#[0-9a-f]{6}$/i.test(border.boxColor || border.color) ? (border.boxColor || border.color) : '#2f241e')}" data-border-color-input ${locked ? 'disabled' : ''}></label>
+                  <label class="scrapbook-field"><span>Padding</span><input class="scrapbook-number" type="number" min="0" max="60" step="1" value="${Math.round(border.boxPadding ?? 8)}" data-border-box-padding ${locked ? 'disabled' : ''}></label>
+                </div>
+              ` : ''}
+              <div class="scrapbook-swatch-stack">
+                ${this.renderSwatches({
+                  className: 'btn-border-color',
+                  dataAttribute: 'data-border-color',
+                  active: border.color,
+                  disabled: locked,
+                  inputAttribute: 'data-border-color-input',
+                })}
+              </div>
+            ` : '<p class="scrapbook-panel-hint">Turn the border on to set its weight, ink and dash.</p>'}
           </section>
         ` : ''}
 
@@ -2507,7 +2915,6 @@ export class ScrapbookWorkspace extends UIComponent {
           ${this.renderSwatches({
             className: 'btn-doodle-color',
             dataAttribute: 'data-color',
-            colors: PEN_COLORS,
             active: this.doodleColor,
             disabled: locked,
             inputAttribute: 'data-doodle-color-input',

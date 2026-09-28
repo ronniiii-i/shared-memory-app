@@ -1754,6 +1754,19 @@
   width: 1.2rem;
   height: 1.2rem;
 }
+/* The shape button draws the shape itself, so it needs a box rather than a
+   fixed square, and it must not be recoloured by the button's own text colour -
+   the shape is the swatch. */
+.scrapbook-shape-option .scrapbook-shape-preview {
+  width: 1.35rem;
+  height: 1.35rem;
+  overflow: visible;
+}
+.scrapbook-shape-option .scrapbook-shape-preview > g > * {
+  /* fabric emits `fill: rgb(...)` inline; the outline shape has none, so it is
+     given one here or the line would be invisible against the button. */
+  vector-effect: non-scaling-stroke;
+}
 .scrapbook-shape-option:hover:not(:disabled),
 .scrapbook-brush-option:hover:not(:disabled) {
   color: var(--accent-ink);
@@ -1989,6 +2002,25 @@
 }
 .scrapbook-subhead {
   margin-top: 0.2rem !important;
+}
+/* One colour of a multi-coloured sticker. Labelled, because "which swatch is
+   the stem" is not a question a row of unlabelled squares answers. */
+.scrapbook-slot {
+  display: grid;
+  gap: 0.3rem;
+}
+.scrapbook-slot + .scrapbook-slot {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border-color);
+}
+.scrapbook-slot-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .scrapbook-tag {
   flex: 0 0 auto;

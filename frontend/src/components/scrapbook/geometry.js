@@ -12,7 +12,7 @@
  * own selection box.
  */
 
-import { Circle, Ellipse, Group, Path, Polygon, Rect, Triangle, Line } from 'fabric';
+import { Circle, Ellipse, Group, Path, Polygon, Rect, Triangle } from 'fabric';
 
 export const STICKER_RIM_DEFAULT = '#fffdf7';
 
@@ -39,15 +39,38 @@ export function hashString(value) {
   return hash >>> 0;
 }
 
-/** Alternating outer/inner radii, for stars and sunbursts. */
+/**
+ * Alternating outer/inner radii, for stars and sunbursts - and, when the two
+ * radii are equal, a regular polygon.
+ *
+ * The equal case has to collapse the inner ring. Emitting the full
+ * `spikes * 2` sequence with both radii the same puts every vertex on the same
+ * circle, which is not a hexagon with 6 points but a 12-sided polygon - so the
+ * shape labelled "Hexagon" came out with twelve sides.
+ */
 export function radialPolygon(spikes, outerRadius, innerRadius, rotation = -Math.PI / 2) {
+  const solid = Math.abs(outerRadius - innerRadius) < 0.01;
+  const count = solid ? spikes : spikes * 2;
+  // A star's vertices advance by half a spike angle, so 2n of them fill a full
+  // turn. A regular n-gon advances by a whole spike angle, so n of them do.
+  // Using the star step for both left a "hexagon" with six points sitting on the
+  // circle but spanning only 150 degrees - the right points in the wrong arc,
+  // which reads as a wedge rather than a shape.
+  const step = (solid ? Math.PI * 2 : Math.PI) / spikes;
   const points = [];
-  for (let index = 0; index < spikes * 2; index += 1) {
-    const radius = index % 2 === 0 ? outerRadius : innerRadius;
-    const angle = rotation + (index * Math.PI) / spikes;
+  for (let index = 0; index < count; index += 1) {
+    const radius = solid || index % 2 === 0 ? outerRadius : innerRadius;
+    const angle = rotation + index * step;
     points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
   }
   return points;
+}
+
+/** Clamp a requested side count into the range the polygon shape offers. */
+export function clampSides(value, range = { min: 3, max: 12 }) {
+  const count = Math.round(Number(value));
+  if (!Number.isFinite(count)) return range.value || range.min;
+  return Math.min(range.max, Math.max(range.min, count));
 }
 
 /** Washi tape: straight along its length, torn at both ends. */
@@ -410,31 +433,96 @@ export function stickerDefinition(id) {
 // A single rounded rectangle is not "shapes". Each entry returns a fresh
 // fabric object so a placed shape is never a shared reference.
 //
-// The rects carry an explicit size because a `Rect` is the one entry whose
-// geometry is *not* intrinsic: `new Rect({ rx })` has no width or height and
-// fabric renders it at 0x0, so the two most likely shapes of all - a plain
-// rectangle and a rounded one - would have been invisible. Every other entry
-// derives its own size from a radius, a point list or a path.
+// Three things every entry has to get right:
+//
+// - A `Rect` is the one shape with no intrinsic size, so it carries an explicit
+//   width and height. `new Rect({ rx })` is 0x0 and renders as nothing.
+// - A `Path` used as an outline (the line) has no fill, so it is marked
+//   `stroke: true` and the colour controls paint its stroke rather than a fill.
+// - `build` takes an options object, because the polygon needs the author's
+//   chosen side count when the page is rebuilt.
+//
+// There is deliberately no `icon` field. The picker draws each shape from this
+// same geometry via `shapeSvg`, because a hand-picked icon name drifts from the
+// shape it stands for - which is how "blob" ended up wearing a spline and
+// "burst" a sun.
+
+/** Default fill for solid shapes, and ink for outline-only ones. */
+export const SHAPE_FILL = '#e7b66b';
+export const SHAPE_INK = '#2f241e';
+
+/** The side-count range the polygon shape offers. */
+const SIDES_RANGE = { min: 3, max: 12, step: 1, value: 6 };
+
+/**
+ * A ribbon banner: swallowtail notches cut into both short ends.
+ * The previous path was a rectangle with a wavy bottom, which read as a flag.
+ */
+const BANNER_PATH = [
+  'M -130 -50', 'L 130 -50', 'L 130 50', 'L 100 50', 'L 130 0', 'L 100 -50',
+  'L -100 -50', 'L -130 0', 'L -100 50', 'L -130 50', 'Z',
+].join(' ');
 
 export const SHAPES = [
-  { id: 'rect', label: 'Rectangle', icon: 'square', build: () => new Rect({ width: 240, height: 165, rx: 2, ry: 2 }) },
-  { id: 'rounded', label: 'Rounded', icon: 'square', build: () => new Rect({ width: 240, height: 165, rx: 26, ry: 26 }) },
-  { id: 'circle', label: 'Circle', icon: 'circle', build: () => new Circle({ radius: 105 }) },
-  { id: 'ellipse', label: 'Ellipse', icon: 'circle', build: () => new Ellipse({ rx: 130, ry: 90 }) },
-  { id: 'triangle', label: 'Triangle', icon: 'triangle', build: () => new Triangle({ width: 240, height: 210 }) },
-  { id: 'star', label: 'Star', icon: 'star', build: () => new Polygon(radialPolygon(5, 125, 52), { originX: 'center', originY: 'center' }) },
-  { id: 'burst', label: 'Burst', icon: 'sun', build: () => new Polygon(radialPolygon(14, 128, 78), { originX: 'center', originY: 'center' }) },
-  { id: 'hexagon', label: 'Hexagon', icon: 'hexagon', build: () => new Polygon(radialPolygon(6, 125, 125, 0), { originX: 'center', originY: 'center' }) },
-  { id: 'heart', label: 'Heart', icon: 'heart', build: () => new Path('M 0 60 C -50 20, -80 -6, -80 -34 C -80 -58, -60 -70, -42 -70 C -26 -70, -12 -60, 0 -44 C 12 -60, 26 -70, 42 -70 C 60 -70, 80 -58, 80 -34 C 80 -6, 50 20, 0 60 Z', { originX: 'center', originY: 'center' }) },
-  { id: 'blob', label: 'Blob', icon: 'spline', build: () => new Polygon(scallopPolygon(7, 128, 96, 0.4), { originX: 'center', originY: 'center' }) },
-  { id: 'bubble', label: 'Speech', icon: 'message-square', build: () => new Path('M -110 -70 L 110 -70 C 124 -70, 132 -60, 132 -46 L 132 34 C 132 48, 124 58, 110 58 L 10 58 L -40 96 L -32 58 L -110 58 C -124 58, -132 48, -132 34 L -132 -46 C -132 -60, -124 -70, -110 -70 Z', { originX: 'center', originY: 'center' }) },
-  { id: 'line', label: 'Line', icon: 'minus', build: () => new Line([0, 0, 240, 0], { originX: 'center', originY: 'center' }) },
-  { id: 'arrow', label: 'Arrow', icon: 'move-right', build: () => new Path('M -120 -22 L 40 -22 L 40 -70 L 124 0 L 40 70 L 40 22 L -120 22 Z', { originX: 'center', originY: 'center' }) },
-  { id: 'banner', label: 'Banner', icon: 'flag', build: () => new Path('M -130 -60 L 130 -60 L 130 40 C 96 74, 62 44, 26 66 C -10 44, -44 74, -130 40 Z', { originX: 'center', originY: 'center' }) },
+  { id: 'rect', label: 'Rectangle', build: () => new Rect({ width: 240, height: 165, rx: 2, ry: 2 }) },
+  { id: 'rounded', label: 'Rounded', build: () => new Rect({ width: 240, height: 165, rx: 26, ry: 26 }) },
+  { id: 'circle', label: 'Circle', build: () => new Circle({ radius: 105 }) },
+  { id: 'ellipse', label: 'Ellipse', build: () => new Ellipse({ rx: 130, ry: 90 }) },
+  { id: 'triangle', label: 'Triangle', build: () => new Triangle({ width: 240, height: 210 }) },
+  {
+    // The side count is the author's call, not the catalogue's. `sides` describes
+    // the control the panel renders; `build` reads the saved value back, so a
+    // page reopened at 9 sides still has 9 sides.
+    id: 'polygon',
+    label: 'Polygon',
+    sides: SIDES_RANGE,
+    build: ({ sides } = {}) => new Polygon(
+      radialPolygon(clampSides(sides, SIDES_RANGE), 125, 125, -Math.PI / 2),
+      { originX: 'center', originY: 'center' },
+    ),
+  },
+  { id: 'star', label: 'Star', build: () => new Polygon(radialPolygon(5, 125, 52), { originX: 'center', originY: 'center' }) },
+  { id: 'burst', label: 'Burst', build: () => new Polygon(radialPolygon(14, 128, 78), { originX: 'center', originY: 'center' }) },
+  { id: 'hexagon', label: 'Hexagon', build: () => new Polygon(radialPolygon(6, 125, 125, 0), { originX: 'center', originY: 'center' }) },
+  { id: 'heart', label: 'Heart', build: () => new Path('M 0 60 C -50 20, -80 -6, -80 -34 C -80 -58, -60 -70, -42 -70 C -26 -70, -12 -60, 0 -44 C 12 -60, 26 -70, 42 -70 C 60 -70, 80 -58, 80 -34 C 80 -6, 50 20, 0 60 Z', { originX: 'center', originY: 'center' }) },
+  { id: 'blob', label: 'Blob', build: () => new Polygon(scallopPolygon(7, 128, 96, 0.4), { originX: 'center', originY: 'center' }) },
+  { id: 'bubble', label: 'Speech', build: () => new Path('M -110 -70 L 110 -70 C 124 -70, 132 -60, 132 -46 L 132 34 C 132 48, 124 58, 110 58 L 10 58 L -40 96 L -32 58 L -110 58 C -124 58, -132 48, -132 34 L -132 -46 C -132 -60, -124 -70, -110 -70 Z', { originX: 'center', originY: 'center' }) },
+  {
+    // A path rather than a fabric Line: a Line has no fill, so every colour
+    // control was a no-op and the shape was invisible until a border was added
+    // by hand. As a stroked Path it is coloured, thickens and borders normally.
+    id: 'line', label: 'Line', stroke: true,
+    build: () => new Path('M -120 0 L 120 0', { fill: null, stroke: SHAPE_INK, strokeWidth: 10, strokeLineCap: 'round', originX: 'center', originY: 'center' }),
+  },
+  { id: 'arrow', label: 'Arrow', build: () => new Path('M -120 -22 L 40 -22 L 40 -70 L 124 0 L 40 70 L 40 22 L -120 22 Z', { originX: 'center', originY: 'center' }) },
+  { id: 'banner', label: 'Banner', build: () => new Path(BANNER_PATH, { originX: 'center', originY: 'center' }) },
 ];
 
 export function shapeDefinition(id) {
   return SHAPES.find((item) => item.id === id) || SHAPES[0];
+}
+
+/**
+ * The shape's own geometry as inline SVG, for the Insert picker.
+ *
+ * Rendered from the object itself rather than from a hand-written path, so the
+ * button cannot show something the canvas will not produce: the picker and the
+ * shape are literally the same code. The inner markup comes from fabric's own
+ * `toSVG`; the outer viewBox is measured, because this build of fabric throws
+ * when passed its `viewBox` option.
+ */
+export function shapeSvg(definition, options = {}) {
+  const object = definition.build(options);
+  if (!object) return '';
+  const bounds = object.getBoundingRect();
+  const pad = 2;
+  const viewBox = [
+    round(bounds.left - pad),
+    round(bounds.top - pad),
+    round(Math.max(bounds.width, 1) + pad * 2),
+    round(Math.max(bounds.height, 1) + pad * 2),
+  ].join(' ');
+  return `<svg class="scrapbook-shape-preview" viewBox="${viewBox}" aria-hidden="true" focusable="false">${object.toSVG()}</svg>`;
 }
 
 // ── palettes ───────────────────────────────────────────────────────────────
@@ -492,27 +580,61 @@ export const FONT_CATEGORIES = ['Serif', 'Sans', 'Hand', 'Script'];
 
 /**
  * Photo looks. `build` receives the fabric `filters` namespace and returns the
- * array to install; `style` is what gets written to the saved element, so it
- * has to stay a plain string the backend can round-trip.
+ * array to install; `id` is what gets written to the saved element, so it has to
+ * stay a plain string the backend can round-trip.
+ *
+ * Two lessons are baked into this list, both of them from it being wrong before:
+ *
+ * - Nothing here leans on `Sepia` for a tint. Sepia is a full colour matrix, so
+ *   `Sepia(0.2)` and `Sepia(0.75)` are both just... brown. Tints use
+ *   `BlendColor` with a named hue instead, which is what actually separates
+ *   warm from cool from mint.
+ * - Every entry has to use a filter that exists. There is no `Posterize` in
+ *   fabric, so the old "Poster" entry threw `f.Posterize is not a constructor`
+ *   and applied nothing at all.
+ *
+ * Only filters verified to exist in this build are used: BlackWhite, BlendColor,
+ * Blur, Brightness, Brownie, ColorMatrix, Contrast, Gamma, Grayscale,
+ * HueRotation, Invert, Kodachrome, Noise, Pixelate, Polaroid, Saturation, Sepia,
+ * Technicolor, Vibrance, Vintage.
  */
 export const PHOTO_FILTERS = [
   { id: 'none', label: 'Original', build: () => [] },
+
+  // Monochrome
   { id: 'mono', label: 'Mono', build: (f) => [new f.Grayscale()] },
+  { id: 'noir', label: 'Noir', build: (f) => [new f.Grayscale(), new f.Contrast(1.5), new f.Brightness(-0.06)] },
+  { id: 'ink', label: 'Ink', build: (f) => [new f.Grayscale(), new f.Contrast(2.1), new f.Brightness(0.02)] },
+
+  // Tinted, by hue rather than by sepia
+  { id: 'warm', label: 'Warm', build: (f) => [new f.BlendColor({ color: '#ff9a3c', mode: 'multiply', alpha: 0.28 }), new f.Vibrance(0.25)] },
+  { id: 'cool', label: 'Cool', build: (f) => [new f.BlendColor({ color: '#4a86d6', mode: 'multiply', alpha: 0.3 }), new f.Saturation(0.92)] },
+  { id: 'mint', label: 'Mint', build: (f) => [new f.BlendColor({ color: '#7fe3c4', mode: 'screen', alpha: 0.22 }), new f.Contrast(1.06)] },
+  { id: 'honey', label: 'Honey', build: (f) => [new f.BlendColor({ color: '#ffc457', mode: 'multiply', alpha: 0.26 }), new f.Saturation(1.25)] },
+  { id: 'rust', label: 'Rust', build: (f) => [new f.BlendColor({ color: '#b4481f', mode: 'multiply', alpha: 0.34 }), new f.Contrast(1.18)] },
+  { id: 'rose', label: 'Rose', build: (f) => [new f.BlendColor({ color: '#ff8fb0', mode: 'screen', alpha: 0.2 }), new f.Gamma({ gamma: [1.06, 0.98, 1.02] })] },
   { id: 'sepia', label: 'Sepia', build: (f) => [new f.Sepia()] },
-  { id: 'warm', label: 'Warm', build: (f) => [new f.Sepia(0.35), new f.Brightness(0.04), new f.Saturation(1.15)] },
-  { id: 'cool', label: 'Cool', build: (f) => [new f.Sepia(0.2), new f.HueRotation(-18), new f.Saturation(0.9)] },
-  { id: 'faded', label: 'Faded', build: (f) => [new f.Sepia(0.2), new f.Contrast(0.78), new f.Brightness(0.12)] },
-  { id: 'punch', label: 'Punch', build: (f) => [new f.Contrast(1.32), new f.Saturation(1.45)] },
-  { id: 'soft', label: 'Soft', build: (f) => [new f.Blur(0.4), new f.Brightness(0.07)] },
-  { id: 'dream', label: 'Dream', build: (f) => [new f.Blur(0.8), new f.Saturation(1.25), new f.Brightness(0.1)] },
-  { id: 'noir', label: 'Noir', build: (f) => [new f.Grayscale(), new f.Contrast(1.45)] },
+
+  // Tonal
+  { id: 'faded', label: 'Faded', build: (f) => [new f.Gamma({ gamma: [1.15, 1.15, 1.15] }), new f.Contrast(0.72), new f.Saturation(0.72)] },
+  { id: 'punch', label: 'Punch', build: (f) => [new f.Contrast(1.34), new f.Vibrance(0.55)] },
+  { id: 'soft', label: 'Soft', build: (f) => [new f.Blur(1.4), new f.Brightness(0.09), new f.Saturation(0.88)] },
+  { id: 'dream', label: 'Dream', build: (f) => [new f.Blur(2.6), new f.Brightness(0.13), new f.Vibrance(0.4)] },
+  { id: 'grain', label: 'Grain', build: (f) => [new f.Noise({ noise: 0.22 }), new f.Contrast(1.08), new f.Saturation(0.85)] },
+
+  // Film stock
+  { id: 'vintage', label: 'Vintage', build: (f) => [new f.Vintage()] },
+  { id: 'brownie', label: 'Brownie', build: (f) => [new f.Brownie()] },
+  { id: 'kodachrome', label: 'Kodachrome', build: (f) => [new f.Kodachrome()] },
+  { id: 'technicolor', label: 'Technicolor', build: (f) => [new f.Technicolor()] },
+  { id: 'polaroid', label: 'Polaroid', build: (f) => [new f.Polaroid()] },
+  { id: 'vhs', label: 'VHS', build: (f) => [new f.Pixelate({ pixels: 4 }), new f.HueRotation(14), new f.Saturation(1.5), new f.Contrast(0.92)] },
+
+  // Graphic
+  { id: 'poster', label: 'Poster', build: (f) => [new f.Grayscale(), new f.BlendColor({ color: '#c8354a', mode: 'multiply', alpha: 0.55 }), new f.Contrast(1.3)] },
+  { id: 'duotone', label: 'Duo', build: (f) => [new f.Grayscale(), new f.BlendColor({ color: '#2f6f8f', mode: 'multiply', alpha: 0.45 })] },
+  { id: 'pixel', label: 'Pixel', build: (f) => [new f.Pixelate({ pixels: 16 })] },
   { id: 'invert', label: 'Invert', build: (f) => [new f.Invert()] },
-  { id: 'poster', label: 'Poster', build: (f) => [new f.Posterize(4)] },
-  { id: 'pixel', label: 'Pixel', build: (f) => [new f.Pixelate(14)] },
-  { id: 'honey', label: 'Honey', build: (f) => [new f.Sepia(0.55), new f.Saturation(1.3), new f.Brightness(0.06)] },
-  { id: 'rust', label: 'Rust', build: (f) => [new f.Sepia(0.75), new f.HueRotation(-8), new f.Contrast(1.15)] },
-  { id: 'mint', label: 'Mint', build: (f) => [new f.HueRotation(95), new f.Saturation(0.7), new f.Brightness(0.08)] },
-  { id: 'vhs', label: 'VHS', build: (f) => [new f.Saturation(1.6), new f.Contrast(0.9), new f.HueRotation(12)] },
 ];
 
 // ── borders & frames ───────────────────────────────────────────────────────
@@ -527,24 +649,114 @@ export const BORDER_STYLES = [
 ];
 
 /**
- * Photo frames are a mat behind the image plus an optional inner rule.
+ * Frames cut the picture to a shape, the way a real mount does.
  *
- * `pad` is uniform, because that is all fabric can do: a frame is the object's
- * own `padding`, and `backgroundColor` fills that padded box evenly. A true
- * polaroid wants a deeper foot, which would need a per-side paint, so Polaroid
- * gets a deeper mat on every side instead and reads as a thick mount rather
- * than pretending to be a foot it cannot draw.
+ * The previous frame was a mat behind the photo plus a rule around it, which is
+ * a border wearing a different name - and the two are now mutually exclusive,
+ * because a stroke on a photo whose edges have been clipped away is either
+ * invisible or a lie.
+ *
+ * Every entry's `build` receives the photo's own box and returns a fabric
+ * object to install as the photo's `clipPath`, so the cut fits whatever size
+ * the image is. The object is returned in the image's local coordinates, centred
+ * on the origin, which is where fabric applies a clipPath.
  */
 export const FRAMES = [
-  { id: 'none', label: 'None', mat: null, border: null, pad: 0 },
-  { id: 'plain', label: 'Plain', mat: '#fffdf7', border: null, pad: 10 },
-  { id: 'outline', label: 'Outline', mat: null, border: { color: '#2f241e', width: 3 }, pad: 6 },
-  { id: 'polaroid', label: 'Mount', mat: '#fffdf7', border: null, pad: 22 },
-  { id: 'taped', label: 'Taped', mat: '#fffdf7', border: { color: '#dcc9a8', width: 2 }, pad: 14 },
-  { id: 'lined', label: 'Lined', mat: '#fffdf7', border: { color: '#d9c9ab', width: 1, style: 'dashed' }, pad: 10 },
-  { id: 'double', label: 'Double', mat: '#fffdf7', border: { color: '#2f241e', width: 2, style: 'double' }, pad: 9 },
-  { id: 'ink', label: 'Ink', mat: null, border: { color: '#111111', width: 4 }, pad: 4 },
+  { id: 'none', label: 'None', build: () => null },
+  { id: 'circle', label: 'Circle', build: (w, h) => new Circle({ radius: Math.min(w, h) / 2, originX: 'center', originY: 'center' }) },
+  { id: 'oval', label: 'Oval', build: (w, h) => new Ellipse({ rx: w / 2, ry: h / 2, originX: 'center', originY: 'center' }) },
+  { id: 'rounded', label: 'Soft', build: (w, h) => new Rect({ width: w, height: h, rx: Math.min(w, h) * 0.16, ry: Math.min(w, h) * 0.16, originX: 'center', originY: 'center' }) },
+  { id: 'arch', label: 'Arch', build: (w, h) => new Path(archPath(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'heart', label: 'Heart', build: (w, h) => new Path(heartPath(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'blob', label: 'Blob', build: (w, h) => new Polygon(blobPoints(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'star', label: 'Star', build: (w, h) => new Polygon(starPoints(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'hexagon', label: 'Hexagon', build: (w, h) => new Polygon(hexagonPoints(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'diamond', label: 'Diamond', build: (w, h) => new Polygon(diamondPoints(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'teardrop', label: 'Drop', build: (w, h) => new Path(dropPath(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'ticket', label: 'Ticket', build: (w, h) => new Path(ticketPath(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'cloud', label: 'Cloud', build: (w, h) => new Polygon(cloudPoints(w, h), { originX: 'center', originY: 'center' }) },
+  { id: 'leaf', label: 'Leaf', build: (w, h) => new Path(leafPath(w, h), { originX: 'center', originY: 'center' }) },
 ];
+
+/**
+ * The frame outlines, fitted to the photo box. Authoring each against the box
+ * rather than against fixed pixels is what stops every frame from having to be
+ * hand-tuned per photo size.
+ */
+
+function archPath(w, h) {
+  // A round-headed doorway: straight sides, semicircular top.
+  //
+  // The dome's radius is capped at half the width *and* the height, and the
+  // chord sits that far down from the top edge, so the finished arch is exactly
+  // the photo's box. Sizing the radius off the width alone made the dome stand
+  // taller than the photo, and a clip that is taller than what it clips just
+  // shows the photo's own straight top edge - the arch silently did nothing.
+  const r = Math.min(w / 2, h);
+  const springLine = -h / 2 + r;
+  return `M ${-w / 2} ${h / 2} L ${-w / 2} ${springLine} A ${r} ${r} 0 0 1 ${w / 2} ${springLine} L ${w / 2} ${h / 2} Z`;
+}
+
+function heartPath(w, h) {
+  // The same curve as the heart sticker, scaled into the box.
+  const sx = w / 160;
+  const sy = h / 130;
+  return `M 0 ${60 * sy} C ${-50 * sx} ${20 * sy}, ${-80 * sx} ${-6 * sy}, ${-80 * sx} ${-34 * sy} `
+    + `C ${-80 * sx} ${-58 * sy}, ${-60 * sx} ${-70 * sy}, ${-42 * sx} ${-70 * sy} `
+    + `C ${-26 * sx} ${-70 * sy}, ${-12 * sx} ${-60 * sy}, 0 ${-44 * sy} `
+    + `C ${12 * sx} ${-60 * sy}, ${26 * sx} ${-70 * sy}, ${42 * sx} ${-70 * sy} `
+    + `C ${60 * sx} ${-70 * sy}, ${80 * sx} ${-58 * sy}, ${80 * sx} ${-34 * sy} `
+    + `C ${80 * sx} ${-6 * sy}, ${50 * sx} ${20 * sy}, 0 ${60 * sy} Z`;
+}
+
+function dropPath(w, h) {
+  // A teardrop: point at the top, round at the bottom.
+  const r = Math.min(w, h) * 0.42;
+  return `M 0 ${-h / 2} C ${r * 1.1} ${-h * 0.1}, ${r * 1.05} ${h / 2}, 0 ${h / 2} `
+    + `C ${-r * 1.05} ${h / 2}, ${-r * 1.1} ${-h * 0.1}, 0 ${-h / 2} Z`;
+}
+
+function ticketPath(w, h) {
+  // A stubby rectangle with a semicircular bite out of each short side.
+  const notch = Math.min(w, h) * 0.12;
+  return `M ${-w / 2} ${-h / 2} L ${w / 2} ${-h / 2} L ${w / 2} ${-notch} `
+    + `A ${notch} ${notch} 0 0 0 ${w / 2} ${notch} L ${w / 2} ${h / 2} `
+    + `L ${-w / 2} ${h / 2} L ${-w / 2} ${notch} `
+    + `A ${notch} ${notch} 0 0 0 ${-w / 2} ${-notch} L ${-w / 2} ${-h / 2} Z`;
+}
+
+function leafPath(w, h) {
+  // Two mirrored arcs meeting at the top and bottom points.
+  return `M 0 ${-h / 2} C ${w / 2} ${-h * 0.22}, ${w / 2} ${h * 0.22}, 0 ${h / 2} `
+    + `C ${-w / 2} ${h * 0.22}, ${-w / 2} ${-h * 0.22}, 0 ${-h / 2} Z`;
+}
+
+function diamondPoints(w, h) {
+  return [
+    { x: 0, y: -h / 2 }, { x: w / 2, y: 0 }, { x: 0, y: h / 2 }, { x: -w / 2, y: 0 },
+  ];
+}
+
+function starPoints(w, h) {
+  const outer = Math.min(w, h) / 2;
+  const inner = outer * 0.42;
+  return radialPolygon(5, outer, inner).map((point) => ({ x: point.x, y: point.y }));
+}
+
+function hexagonPoints(w, h) {
+  const radius = Math.min(w, h) / 2;
+  return radialPolygon(6, radius, radius, 0);
+}
+
+function blobPoints(w, h) {
+  const radius = Math.min(w, h) / 2;
+  return scallopPolygon(7, radius * 0.98, radius * 0.74, 0.4);
+}
+
+function cloudPoints(w, h) {
+  const radius = Math.min(w, h) / 2;
+  return scallopPolygon(5, radius * 0.98, radius * 0.68, -Math.PI / 2);
+}
 
 export function frameDefinition(id) {
   return FRAMES.find((frame) => frame.id === id) || FRAMES[0];
@@ -610,19 +822,93 @@ function rimFor(part, rim) {
   return null;
 }
 
+// ── colour slots ───────────────────────────────────────────────────────────
+//
+// A sticker is not two colours. The cherries are red fruit, green stems and a
+// green leaf; the cake has icing, sponge, a cherry and a candle; the toadstool
+// has a cap, spots and a stalk. The panel used to offer one swatch and an
+// "accent", so everything else was frozen at whatever the catalogue said.
+//
+// Rather than annotate 38 definitions by hand, the slots are *derived* from the
+// parts: a part either follows the sticker fill, or names a colour of its own.
+// Each distinct named colour becomes a slot, in the order it first appears, and
+// each part is permanently bound to its slot index. The mapping is computed
+// from the definition's own colours and cached, so it stays stable while the
+// user edits the colours themselves - keying it by the current colour would
+// renumber the slots on every change.
+
+const slotCache = new WeakMap();
+
+/** slot 0 is the fill, slot 1 (if the sticker has one) the accent, then details. */
+function slotsFor(definition) {
+  const cached = slotCache.get(definition);
+  if (cached) return cached;
+
+  const accent = definition.accent ?? null;
+  const parts = definition.parts(accent);
+  const order = [null];
+  if (accent) order.push(accent);
+  const index = parts.map((part) => {
+    // A detail draws a stroke, a solid part a fill; either way its colour is
+    // the thing to look for.
+    const key = part.fill === null ? part.stroke : part.fill;
+    if (typeof key !== 'string') return 0;
+    const at = order.indexOf(key);
+    if (at >= 0) return at;
+    order.push(key);
+    return order.length - 1;
+  });
+
+  const slots = { order, index, count: order.length };
+  slotCache.set(definition, slots);
+  return slots;
+}
+
+const SLOT_LABELS = ['Fill', 'Accent'];
+
+/** The human name of a slot, for the colour rows in the panel. */
+function slotLabel(index) {
+  if (SLOT_LABELS[index]) return SLOT_LABELS[index];
+  return `Detail ${index - 1}`;
+}
+
+/**
+ * A sticker's editable colours, as `{ count, colors, labels }`.
+ *
+ * `colors` may be passed to override; anything left out falls back to the
+ * definition's own colour, so a partially-saved sticker still renders.
+ */
+export function stickerColors(definition, colors) {
+  const { order, count } = slotsFor(definition);
+  const resolved = [];
+  const labels = [];
+  for (let index = 0; index < count; index += 1) {
+    resolved.push(colors?.[index] || order[index] || definition.fill);
+    labels.push(slotLabel(index));
+  }
+  return { count, colors: resolved, labels };
+}
+
+/** The colour a single part should be painted, given the resolved palette. */
+function colourFor(part, colors, slot) {
+  if (part.fill === null) return colors[slot];
+  if (part.fill) return colors[slot];
+  return colors[0];
+}
+
 /** One shape part as a fabric object. */
-export function partToFabric(part, fill, accent, rim) {
+export function partToFabric(part, colors, slot, rim) {
   const isDetail = part.fill === null;
   const rimSpec = isDetail ? null : rimFor(part, rim);
   const paint = isDetail
     ? {
       fill: null,
-      stroke: part.stroke || accent,
+      stroke: colourFor(part, colors, slot),
       strokeWidth: part.strokeWidth || 3,
       strokeLineCap: 'round',
     }
     : {
-      fill: part.fill || fill,
+      fill: colourFor(part, colors, slot),
       stroke: rimSpec ? rimSpec.color : null,
       strokeWidth: rimSpec ? rimSpec.width : 0,
       strokeUniform: true,
@@ -648,12 +934,12 @@ export function partToFabric(part, fill, accent, rim) {
 }
 
 /** The same part as inline SVG, for the picker. `paint-order` mirrors fabric. */
-export function partToSvg(part, fill, accent, rim) {
+export function partToSvg(part, colors, slot, rim) {
   const isDetail = part.fill === null;
   const rimSpec = isDetail ? null : rimFor(part, rim);
   const attributes = isDetail
-    ? `fill="none" stroke="${part.stroke || accent || fill}" stroke-width="${part.strokeWidth || 3}"`
-    : `fill="${part.fill || fill}"${rimSpec ? ` stroke="${rimSpec.color}" stroke-width="${rimSpec.width}"${rimSpec.dash ? ` stroke-dasharray="${rimSpec.dash.join(' ')}"` : ''}` : ' stroke="none" stroke-width="0"'}`;
+    ? `fill="none" stroke="${colourFor(part, colors, slot)}" stroke-width="${part.strokeWidth || 3}"`
+    : `fill="${colourFor(part, colors, slot)}"${rimSpec ? ` stroke="${rimSpec.color}" stroke-width="${rimSpec.width}"${rimSpec.dash ? ` stroke-dasharray="${rimSpec.dash.join(' ')}"` : ''}` : ' stroke="none" stroke-width="0"'}`;
   const common = `${attributes} stroke-linejoin="round" stroke-linecap="round"${rimSpec ? ' paint-order="stroke"' : ''}`;
   const transform = part.angle || part.rotate ? ` transform="rotate(${part.angle || part.rotate} ${part.x || 0} ${part.y || 0})"` : '';
 
@@ -775,34 +1061,50 @@ export function stickerViewBox(definition) {
   return `${round(minX - pad)} ${round(minY - pad)} ${round(width)} ${round(height)}`;
 }
 
-export function stickerSvg(definition, rim) {
+export function stickerSvg(definition, rim, colors) {
   const parts = definition.parts(definition.accent);
+  const { index } = slotsFor(definition);
+  const palette = stickerColors(definition, colors).colors;
   return `<svg viewBox="${stickerViewBox(definition)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${parts
-    .map((part) => partToSvg(part, definition.fill, definition.accent, rim))
+    .map((part, at) => partToSvg(part, palette, index[at] ?? 0, rim))
     .join('')}</svg>`;
 }
 
 /**
- * Rebuild a sticker from its id. Sticker pages store only the id, the two
- * swatch colours and the rim choice, so recolouring, resizing or extending the
- * catalogue never has to round-trip a path.
+ * Rebuild a sticker from its id.
+ *
+ * Sticker pages store only the id, its colour slots and the rim choice, so
+ * recolouring, resizing or extending the catalogue never has to round-trip a
+ * path. `fill`/`accentColor` are still accepted and land in the first two slots,
+ * which is what keeps pages saved before the slot model opening.
  */
-export function buildSticker(stickerId, { fill, accentColor, scale, rim } = {}) {
+export function buildSticker(stickerId, { colors, fill, accentColor, scale, rim } = {}) {
   const definition = stickerDefinition(stickerId);
-  const main = fill || definition.fill;
-  const accent = accentColor || definition.accent;
-  const parts = definition.parts(accent)
-    .map((part) => partToFabric(part, main, accent, rim))
+  const { index } = slotsFor(definition);
+  const palette = stickerColors(definition, colors || legacyColors(definition, fill, accentColor)).colors;
+  const parts = definition.parts(definition.accent)
+    .map((part, at) => partToFabric(part, palette, index[at] ?? 0, rim))
     .filter(Boolean);
   const group = new Group(parts, { subTargetCheck: false });
   group.elementType = 'sticker';
   group.stickerId = definition.id;
-  group.fill = main;
-  group.accentColor = accent || null;
+  group.stickerColors = palette;
+  // Kept as flat fields too: they are what the older pages stored, and the
+  // layer name and the swatches both still read them.
+  group.fill = palette[0];
+  group.accentColor = palette[1] ?? null;
   group.stickerRim = rim ?? definition.rim ?? false;
   // Every shape is authored inside a roughly 100-unit box, so one base scale
   // keeps them visually consistent without per-definition tuning.
   const size = (scale || 1) * 1.1;
   group.set({ scaleX: size, scaleY: size, originX: 'center', originY: 'center' });
   return group;
+}
+
+/** Fold the two old flat colour fields into a slot array. */
+function legacyColors(definition, fill, accentColor) {
+  const list = [];
+  if (fill) list[0] = fill;
+  if (accentColor) list[1] = accentColor;
+  return list.length ? list : null;
 }

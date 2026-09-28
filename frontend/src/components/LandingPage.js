@@ -58,6 +58,7 @@ export class LandingPage extends UIComponent {
           )}
 
           <div class="memora-hero-copy">
+            <img class="memora-hero-logo memora-enter" style="--memora-reveal-delay: 0ms" src="/memora-logo-512.png" alt="Memora" width="512" height="279" />
             <h1 id="memora-hero-title" class="memora-enter" style="--memora-reveal-delay: 40ms">Keep the moments that matter.</h1>
             <p class="memora-hero-lede memora-enter" style="--memora-reveal-delay: 170ms">Memora is a shared place for the photographs, stories, voice notes, and small details you want to remember together.</p>
             <div class="memora-hero-actions memora-enter" style="--memora-reveal-delay: 300ms">

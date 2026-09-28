@@ -49,7 +49,7 @@ export function openAuthModal(initialTab = 'login') {
       </button>
 
       <div class="w-full text-center">
-        <div class="memora-panel-mark mx-auto"><i data-lucide="camera" aria-hidden="true"></i></div>
+        <div class="memora-panel-mark mx-auto"><img src="/memora-mark.png" alt="" width="96" height="96" /></div>
 
         <div>
           <p class="memora-kicker">Memora</p>

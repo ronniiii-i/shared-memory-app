@@ -37,7 +37,7 @@ export class Navbar extends UIComponent {
       <header class="memora-nav">
         <a href="#/" class="memora-nav-brand" aria-label="Memora Home">
           <span class="memora-wordmark-mark" aria-hidden="true">
-            <i data-lucide="camera"></i>
+            <img src="/memora-mark.png" alt="" width="96" height="96" />
           </span>
           <span class="memora-wordmark">Memora</span>
         </a>

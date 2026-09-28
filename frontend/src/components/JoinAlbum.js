@@ -95,7 +95,7 @@ export class JoinAlbum extends UIComponent {
             'memora-doodles-honey memora-doodles-faint'
           )}
 
-          <div class="memora-panel-mark"><i data-lucide="camera" aria-hidden="true"></i></div>
+          <div class="memora-panel-mark"><img src="/memora-mark.png" alt="" width="96" height="96" /></div>
 
           <h1 class="font-serif-heading text-2xl font-bold text-heading">You're invited.</h1>
           <p class="memora-sheet-copy" style="font-size: 0.85rem">Someone would like you to add your photographs to their album.</p>

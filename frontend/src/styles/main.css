@@ -144,16 +144,12 @@
   width: 2.75rem;
   height: 2.75rem;
   margin-bottom: 1rem;
-  color: white;
-  background: var(--accent-sienna);
-  border-radius: 0.7rem 0.9rem 0.65rem 0.8rem;
-  box-shadow: 0 5px 0
-    color-mix(in srgb, var(--accent-terracotta) 65%, transparent);
   transform: rotate(-3deg);
 }
-.memora-panel-mark svg {
-  width: 1.25rem;
-  height: 1.25rem;
+.memora-panel-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .memora-drop-zone {
   padding: 2.5rem 1.25rem;
@@ -469,6 +465,13 @@
 }
 .memora-hero-copy {
   max-width: 38rem;
+}
+.memora-hero-logo {
+  display: block;
+  width: 11rem;
+  max-width: 60%;
+  height: auto;
+  margin: 0 0 1.4rem;
 }
 .memora-eyebrow {
   display: inline-flex;
@@ -794,8 +797,10 @@
 }
 
 .loader-logo {
-  font-size: 3rem;
-  margin-bottom: 0.5rem;
+  width: 3rem;
+  height: 3rem;
+  margin: 0 auto 0.5rem;
+  object-fit: contain;
 }
 
 .loader-title {
@@ -2217,20 +2222,14 @@
   place-items: center;
   width: 1.9rem;
   height: 1.9rem;
-  color: #fff;
-  background: var(--accent-sienna);
-  border-radius: 0.5rem 0.7rem 0.45rem 0.65rem;
-  box-shadow: 0 3px 0
-    color-mix(in srgb, var(--accent-terracotta) 70%, transparent);
   transform: rotate(-4deg);
-  transition:
-    transform var(--dur-base) var(--ease-lift),
-    background-color var(--dur-base) var(--ease-soft);
+  transition: transform var(--dur-base) var(--ease-lift);
 }
 
-.memora-wordmark-mark svg {
-  width: 1rem;
-  height: 1rem;
+.memora-wordmark-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .memora-nav-brand:hover .memora-wordmark-mark {

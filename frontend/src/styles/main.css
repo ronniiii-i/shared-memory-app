@@ -1302,10 +1302,35 @@
   flex-direction: column;
   min-width: 0;
 }
+/* Fullscreen puts the whole editor in the viewport, and the rail has to fill
+   it - otherwise the page floats in a letterboxed strip with a huge empty
+   gutter beside it, which is the opposite of what full screen is for. */
+.scrapbook-editor-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+.scrapbook-editor-shell:fullscreen .scrapbook-editor-body {
+  flex: 1;
+  min-height: 0;
+}
+.scrapbook-editor-shell:fullscreen .scrapbook-inspector-panel {
+  max-height: none;
+}
+.scrapbook-editor-shell:fullscreen .scrapbook-canvas-region {
+  min-height: 0;
+  overflow: auto;
+}
 .scrapbook-topbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  /* Wraps rather than overflowing: the bar now carries mode, history, zoom and
+     export groups, which is more than fits beside the title on a laptop. A
+     wrapped second row beats a clipped toolbar with no scrollbar. */
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
   padding: 0.8rem 1.1rem;
   border-bottom: 1px solid var(--border-color);
 }
@@ -1313,6 +1338,7 @@
 .scrapbook-topbar-end {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 .scrapbook-topbar-end {
@@ -1370,6 +1396,14 @@
 .scrapbook-revision {
   color: var(--text-muted);
   font-size: 0.68rem;
+}
+/* The zoom readout is a button, not a label: clicking it snaps back to 100%, so
+   it has to read as tappable and it has to be wide enough that "100%" does not
+   reflow the group as the number changes. */
+.scrapbook-segmented .scrapbook-zoom-label {
+  min-width: 3.4rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 .icon-button,
 .tool-button {
@@ -1448,9 +1482,11 @@
 }
 .scrapbook-inspector-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.1rem;
-  padding: 0.5rem 0.45rem 0;
+  /* 3x2 rather than one row of six. Six across a 320px rail is ~45px a tab,
+     which truncates the labels and drops under a usable touch target. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.5rem 0.45rem;
   background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-surface));
   border-bottom: 1px solid var(--border-color);
 }
@@ -1458,29 +1494,41 @@
   display: grid;
   place-items: center;
   gap: 0.2rem;
-  padding: 0.5rem 0.1rem 0.45rem;
+  /* A real hit area, not a hairline. */
+  min-height: 2.9rem;
+  padding: 0.45rem 0.2rem;
   color: var(--text-muted);
   background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0.5rem 0.5rem 0 0;
-  font-size: 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  font-size: 0.63rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 .scrapbook-inspector-tab svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 .scrapbook-inspector-tab:hover {
   color: var(--accent-sienna);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
 }
 .scrapbook-inspector-tab.is-active {
+  /* A filled pill, not an underline. The underline was the only difference
+     before, and at this size it read as a hairline rather than as "you are
+     here" - which is what made the tab look stuck on Insert. Three signals at
+     once (tint, border, label colour) so the active tab is legible at a glance
+     and in a screenshot. */
   color: var(--accent-sienna);
-  background: var(--bg-surface);
-  border-bottom-color: var(--accent-sienna);
+  background: color-mix(in srgb, var(--accent-sienna) 12%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--accent-sienna) 42%, transparent);
+  box-shadow: var(--shadow-lift);
+}
+.scrapbook-inspector-tab:focus-visible {
+  outline: 2px solid var(--accent-sienna);
+  outline-offset: 1px;
 }
 .scrapbook-inspector-panel {
   flex: 1;
@@ -1573,34 +1621,391 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-.scrapbook-font-grid {
-  display: grid;
-  gap: 0.3rem;
+/* ── Font menu ──────────────────────────────────────────────────────────── */
+/* A <select> cannot set each option in its own typeface, which is the whole
+   point of choosing a scrapbook face. So this is a real listbox. */
+.scrapbook-font-menu {
+  position: relative;
 }
-.scrapbook-font-option {
-  padding: 0.5rem 0.65rem;
+.scrapbook-font-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.7rem;
   color: var(--text-main);
   text-align: left;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 0.55rem;
   font-size: 0.95rem;
-  line-height: 1.25;
+  line-height: 1.2;
   cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease;
 }
-.scrapbook-font-option:hover:not(:disabled) {
-  color: var(--accent-sienna);
+.scrapbook-font-trigger svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transition: transform 140ms ease;
+}
+.scrapbook-font-trigger.is-open svg {
+  transform: rotate(180deg);
+}
+.scrapbook-font-trigger:hover:not(:disabled),
+.scrapbook-font-trigger.is-open {
+  color: var(--accent-ink);
   border-color: var(--accent-sienna);
 }
-.scrapbook-font-option.is-active {
-  color: var(--accent-sienna);
-  background: color-mix(in srgb, var(--accent-sienna) 12%, var(--bg-surface));
-  border-color: var(--accent-sienna);
-}
-.scrapbook-font-option:disabled {
+.scrapbook-font-trigger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.scrapbook-font-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  right: 0;
+  /* Capped and scrollable: twelve faces at full row height would run off the
+     bottom of the panel and off the screen. */
+  max-height: 17rem;
+  overflow-y: auto;
+  padding: 0.3rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.7rem;
+  box-shadow: var(--shadow-float);
+}
+.scrapbook-font-group {
+  margin: 0.4rem 0 0.25rem;
+  padding: 0 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.scrapbook-font-group:first-child {
+  margin-top: 0.1rem;
+}
+.scrapbook-font-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.5rem;
+  color: var(--text-main);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.scrapbook-font-option svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  color: var(--accent-ink);
+}
+.scrapbook-font-option:hover {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-sienna) 10%, transparent);
+}
+.scrapbook-font-option.is-active {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-sienna) 14%, transparent);
+}
+
+/* ── Grids: shapes, paper, looks, brushes ──────────────────────────────── */
+.scrapbook-shape-grid,
+.scrapbook-brush-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.scrapbook-shape-option,
+.scrapbook-brush-option {
+  display: grid;
+  place-items: center;
+  gap: 0.25rem;
+  min-height: 3.1rem;
+  padding: 0.45rem 0.2rem;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.scrapbook-shape-option svg,
+.scrapbook-brush-option svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.scrapbook-shape-option:hover:not(:disabled),
+.scrapbook-brush-option:hover:not(:disabled) {
+  color: var(--accent-ink);
+  border-color: var(--accent-sienna);
+  transform: translateY(-1px);
+}
+.scrapbook-brush-option.is-active {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-sienna) 14%, var(--bg-surface));
+  border-color: var(--accent-sienna);
+}
+.scrapbook-shape-option:disabled,
+.scrapbook-brush-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Looks and frames read as a set of chips, so they get their own looser wrap
+   rather than the 2-column button grid used for actions. */
+.scrapbook-look-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.scrapbook-look-option {
+  min-height: 2rem;
+  padding: 0.35rem 0.6rem;
+  color: var(--text-main);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.scrapbook-look-option:hover:not(:disabled) {
+  color: var(--accent-ink);
+  border-color: var(--accent-sienna);
+}
+.scrapbook-look-option.is-active {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-sienna) 14%, var(--bg-surface));
+  border-color: var(--accent-sienna);
+}
+.scrapbook-look-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scrapbook-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.scrapbook-bg-option {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+.scrapbook-bg-option:hover:not(:disabled) {
+  border-color: var(--accent-sienna);
+  transform: translateY(-1px);
+}
+.scrapbook-bg-option.is-active {
+  border-color: var(--accent-sienna);
+  box-shadow: 0 0 0 1px var(--accent-sienna);
+}
+.scrapbook-bg-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scrapbook-bg-swatch {
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(125, 88, 51, 0.18);
+}
+.scrapbook-bg-label {
+  color: var(--text-muted);
+  font-size: 0.53rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ── Layers ─────────────────────────────────────────────────────────────── */
+.scrapbook-layer-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scrapbook-layer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.25rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.scrapbook-layer-row.is-active {
+  border-color: var(--accent-sienna);
+  background: color-mix(in srgb, var(--accent-sienna) 10%, var(--bg-surface));
+}
+.scrapbook-layer-row.is-hidden {
+  opacity: 0.55;
+}
+.scrapbook-layer-main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.25rem 0.35rem;
+  color: var(--text-main);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scrapbook-layer-main:hover:not(:disabled) {
+  color: var(--accent-ink);
+}
+.scrapbook-layer-main:disabled {
+  cursor: not-allowed;
+}
+.scrapbook-layer-main svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.scrapbook-layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scrapbook-layer-tools {
+  display: flex;
+  gap: 0.1rem;
+}
+.scrapbook-layer-tools .tool-button-tiny {
+  min-width: 1.7rem;
+  min-height: 1.7rem;
+  padding: 0.2rem;
+  border-radius: 0.4rem;
+}
+.scrapbook-layer-tools .tool-button-tiny svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+/* ── Swatches, colour inputs, ranges ────────────────────────────────────── */
+.scrapbook-swatch-stack {
+  display: grid;
+  gap: 0.4rem;
+}
+.scrapbook-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.scrapbook-swatch-row-custom {
+  padding-top: 0.15rem;
+  border-top: 1px dashed var(--border-color);
+}
+.color-swatch-custom {
+  position: relative;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.color-swatch-custom svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  /* The pipette has to read on top of any colour the user has chosen. */
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+  pointer-events: none;
+}
+.color-swatch-custom input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  opacity: 0;
+  border: 0;
+  cursor: pointer;
+}
+.scrapbook-field-color {
+  grid-template-columns: auto;
+}
+.scrapbook-color-input {
+  width: 100%;
+  height: 2.1rem;
+  padding: 0.15rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.scrapbook-color-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scrapbook-field-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+.scrapbook-range {
+  width: 100%;
+  height: 1.4rem;
+  accent-color: var(--accent-sienna);
+  cursor: pointer;
+}
+.scrapbook-range:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.scrapbook-subhead {
+  margin-top: 0.2rem !important;
+}
+.scrapbook-tag {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.45rem;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.scrapbook-tag.is-on {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent-sienna) 14%, var(--bg-surface));
+  border-color: var(--accent-sienna);
 }
 .scrapbook-sticker-grid {
   display: grid;
@@ -1675,7 +2080,112 @@
 .scrapbook-fabric-wrapper .lower-canvas {
   outline: none;
 }
-.scrapbook-canvas-stage.film {
+/* ── Page papers ────────────────────────────────────────────────────────── */
+/* Every paper is declared once, against both the stage and its picker swatch.
+   Two separate lists is how a thumbnail drifts away from the real background,
+   and a picker that lies is worse than no picker. The stage and the swatch need
+   the same `background-*` values and nothing else, so they can share a rule. */
+.scrapbook-canvas-stage.paper,
+.scrapbook-bg-swatch.is-paper {
+  background-color: #fdfaf4;
+  background-image: none;
+}
+.scrapbook-canvas-stage.graph,
+.scrapbook-bg-swatch.is-graph {
+  background-color: #fbfaf3;
+  background-image:
+    linear-gradient(rgba(96, 138, 168, 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 138, 168, 0.28) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.scrapbook-canvas-stage.lined,
+.scrapbook-bg-swatch.is-lined {
+  background-color: #fbfaf5;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 25px,
+    rgba(120, 100, 82, 0.22) 25px 26px
+  );
+  background-size: auto;
+}
+.scrapbook-canvas-stage.dot,
+.scrapbook-bg-swatch.is-dot {
+  background-color: #fdfaf5;
+  background-image: radial-gradient(rgba(120, 100, 82, 0.34) 1.1px, transparent 1.1px);
+  background-size: 17px 17px;
+}
+.scrapbook-canvas-stage.grid,
+.scrapbook-bg-swatch.is-grid {
+  background-color: #f7f6f2;
+  background-image:
+    linear-gradient(rgba(125, 88, 51, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 88, 51, 0.2) 1px, transparent 1px);
+  background-size: 38px 38px;
+}
+.scrapbook-canvas-stage.kraft,
+.scrapbook-bg-swatch.is-kraft {
+  background-color: #d9bd94;
+  background-image:
+    radial-gradient(rgba(120, 86, 52, 0.16) 0.8px, transparent 0.8px),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.16), transparent 60%);
+  background-size: 6px 6px, auto;
+}
+.scrapbook-canvas-stage.watercolour,
+.scrapbook-bg-swatch.is-watercolour {
+  background-color: #fdfbf7;
+  background-image:
+    radial-gradient(ellipse 42% 34% at 18% 22%, rgba(200, 90, 50, 0.13), transparent 70%),
+    radial-gradient(ellipse 38% 30% at 82% 30%, rgba(63, 124, 197, 0.12), transparent 70%),
+    radial-gradient(ellipse 46% 32% at 46% 82%, rgba(63, 155, 105, 0.11), transparent 70%);
+  background-size: auto;
+}
+.scrapbook-canvas-stage.confetti,
+.scrapbook-bg-swatch.is-confetti {
+  background-color: #fdfaf5;
+  background-image:
+    radial-gradient(circle 2px at 12% 18%, rgba(200, 90, 50, 0.5) 99%, transparent),
+    radial-gradient(circle 1.5px at 68% 12%, rgba(63, 124, 197, 0.5) 99%, transparent),
+    radial-gradient(circle 2.5px at 86% 62%, rgba(214, 155, 61, 0.55) 99%, transparent),
+    radial-gradient(circle 1.5px at 32% 74%, rgba(63, 155, 105, 0.5) 99%, transparent),
+    radial-gradient(circle 2px at 52% 42%, rgba(107, 79, 138, 0.45) 99%, transparent);
+  background-size: 46px 46px;
+}
+.scrapbook-canvas-stage.stripes,
+.scrapbook-bg-swatch.is-stripes {
+  background-color: #fbf9f4;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(200, 90, 50, 0.13) 0 9px,
+    transparent 9px 18px
+  );
+  background-size: auto;
+}
+.scrapbook-canvas-stage.checks,
+.scrapbook-bg-swatch.is-checks {
+  background-color: #fdfaf6;
+  background-image:
+    linear-gradient(rgba(200, 90, 50, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 90, 50, 0.14) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.scrapbook-canvas-stage.marble,
+.scrapbook-bg-swatch.is-marble {
+  background-color: #f6f4f1;
+  background-image:
+    repeating-radial-gradient(
+      circle at 18% 32%,
+      transparent 0 14px,
+      rgba(125, 88, 51, 0.07) 14px 15px
+    ),
+    repeating-radial-gradient(
+      circle at 82% 68%,
+      transparent 0 20px,
+      rgba(96, 138, 168, 0.07) 20px 21px
+    );
+  background-size: auto;
+}
+.scrapbook-canvas-stage.film,
+.scrapbook-bg-swatch.is-film {
   background-color: #20242a;
   background-image: linear-gradient(
     90deg,
@@ -1684,7 +2194,8 @@
   );
   background-size: 32px 32px;
 }
-.scrapbook-canvas-stage.collage {
+.scrapbook-canvas-stage.collage,
+.scrapbook-bg-swatch.is-collage {
   background-color: #ead7c5;
   background-image: linear-gradient(
     135deg,
@@ -1696,6 +2207,16 @@
     transparent 75%
   );
   background-size: 28px 28px;
+}
+.scrapbook-canvas-stage.terrazzo,
+.scrapbook-bg-swatch.is-terrazzo {
+  background-color: #f8f5f0;
+  background-image:
+    radial-gradient(circle 3px at 22% 26%, rgba(200, 90, 50, 0.4) 99%, transparent),
+    radial-gradient(circle 2px at 68% 18%, rgba(63, 124, 197, 0.4) 99%, transparent),
+    radial-gradient(circle 2.5px at 82% 68%, rgba(63, 155, 105, 0.4) 99%, transparent),
+    radial-gradient(circle 2px at 38% 76%, rgba(214, 155, 61, 0.45) 99%, transparent);
+  background-size: 58px 58px;
 }
 .scrapbook-fabric-wrapper {
   margin: 0 auto;

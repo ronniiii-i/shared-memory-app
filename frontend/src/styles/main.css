@@ -3644,11 +3644,118 @@
   box-shadow: 0 2.5rem 5rem -1.5rem rgba(0, 0, 0, 0.85);
 }
 
+/* ── Moving between frames ───────────────────────────────────────────────
+   The plate is the moving part: it slides out under the finger, and the next
+   frame slides in from the same side. Transitions are declared on the plate
+   rather than the stage so the caption and the side panel stay put — a real
+   lightbox moves the photograph, not the furniture around it. */
+
+.memora-lightbox-plate {
+  transition:
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 260ms ease;
+  will-change: transform;
+}
+
+.memora-plate-dragging {
+  transition: none;
+}
+
+.memora-plate-out-left {
+  transform: translate3d(-100%, 0, 0);
+  opacity: 0;
+}
+
+.memora-plate-out-right {
+  transform: translate3d(100%, 0, 0);
+  opacity: 0;
+}
+
+.memora-plate-in-left {
+  animation: memora-plate-in-left 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.memora-plate-in-right {
+  animation: memora-plate-in-right 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.memora-plate-in-place {
+  animation: memora-plate-in-place 220ms ease both;
+}
+
+/* Past the last frame there is nowhere to go, so the edge resists instead. */
+.memora-plate-nudge-left {
+  animation: memora-nudge-left 280ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.memora-plate-nudge-right {
+  animation: memora-nudge-right 280ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes memora-plate-in-left {
+  from {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes memora-plate-in-right {
+  from {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes memora-plate-in-place {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes memora-nudge-left {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  40% {
+    transform: translate3d(-2.5rem, 0, 0);
+  }
+}
+
+@keyframes memora-nudge-right {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  40% {
+    transform: translate3d(2.5rem, 0, 0);
+  }
+}
+
 .memora-lightbox-plate img {
   display: block;
   max-width: 100%;
   max-height: 52vh;
   object-fit: contain;
+  /* A dragged photograph should not start a native image drag. */
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 @media (min-width: 900px) {

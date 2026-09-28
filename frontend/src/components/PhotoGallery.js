@@ -9,6 +9,13 @@ import { doodleLayer, doodle } from './Doodles.js';
 const REACTIONS = ['🔥', '❤️', '🎉', '😂', '✨'];
 
 /**
+ * How long the outgoing photograph takes to slide clear before the next one is
+ * swapped in. Long enough to read as movement, short enough that holding an
+ * arrow key still feels responsive. Paired with `NAV_IN_MS` in main.css.
+ */
+const NAV_OUT_MS = 150;
+
+/**
  * How the contact sheet can be ordered. A shared album is deliberately casual
  * about sequence, so the default is the honest one — the order things arrived —
  * and the other two are there for people who want a handle.
@@ -35,8 +42,23 @@ export class PhotoGallery extends UIComponent {
     this._lightboxListeners = [];
 
     this.handleKeyDown = this.handleKeyDown.bind(this);
-    this.touchStartX = 0;
     this._keydownBound = false;
+
+    /** Live drag state, shared by the pointer handlers on the lightbox host. */
+    this._dragStartX = null;
+    this._dragDelta = 0;
+    this._dragMoved = false;
+
+    /**
+     * Which way the last navigation went, and whether one is still in flight.
+     *
+     * `_navDirection` is read by renderLightbox to pick the entrance
+     * animation, so the markup knows which way it is arriving from. `_navLock`
+     * keeps a held arrow key or a fast double-tap from queueing several
+     * overlapping transitions.
+     */
+    this._navDirection = 0;
+    this._navLock = false;
 
     /**
      * True from the moment a take starts until it has been saved.
@@ -113,8 +135,8 @@ export class PhotoGallery extends UIComponent {
     document.body.appendChild(host);
     this._lightboxHost = host;
 
-    const on = (event, handler) => {
-      host.addEventListener(event, handler);
+    const on = (event, handler, options) => {
+      host.addEventListener(event, handler, options);
       this._lightboxListeners.push({ event, handler });
     };
 
@@ -163,21 +185,75 @@ export class PhotoGallery extends UIComponent {
       }
 
       // Everything above is a control. What is left is the scrim itself, and
-      // only the scrim closes on click — the framed card never does.
+      // only the scrim closes on click — the framed card never does. A drag
+      // that ended over the scrim must not read as a click, or letting go of a
+      // swipe would close the lightbox you were moving through.
+      if (this._dragMoved) {
+        this._dragMoved = false;
+        return;
+      }
       if (!e.target.closest('.memora-lightbox-content')) this.closeLightbox();
     });
 
-    // Swipe support for mobile. Also host-scoped, for the same reason.
-    on('touchstart', (e) => {
-      if (e.target.closest('.memora-lightbox-content')) return;
-      this.touchStartX = e.changedTouches[0].screenX;
+    // Drag and swipe. Pointer events cover mouse, pen and touch in one path.
+    //
+    // The plate — the photograph itself — is the surface you move, because that
+    // is where a thumb already is. Listening on the scrim instead meant a swipe
+    // only registered in the thin margin around the photo, which in practice
+    // meant it never did.
+    const plate = () => this._lightboxHost?.querySelector('.memora-lightbox-plate');
+
+    on('pointerdown', (e) => {
+      // Never interrupt a take: the recorder lives inside this overlay.
+      if (this._recording || !e.target.closest('.memora-lightbox-plate')) return;
+      this._dragStartX = e.clientX;
+      this._dragDelta = 0;
+      this._dragMoved = false;
     });
 
-    on('touchend', (e) => {
-      if (e.target.closest('.memora-lightbox-content')) return;
-      const touchEndX = e.changedTouches[0].screenX;
-      if (touchEndX < this.touchStartX - 50) this.navigate(1);
-      if (touchEndX > this.touchStartX + 50) this.navigate(-1);
+    on('pointermove', (e) => {
+      if (this._dragStartX === null) return;
+      this._dragDelta = e.clientX - this._dragStartX;
+
+      // A few pixels of jitter should not count as a drag, or the scrim
+      // click-through below gets suppressed on every ordinary tap.
+      if (Math.abs(this._dragDelta) > 6) this._dragMoved = true;
+
+      const el = plate();
+      if (!el) return;
+      if (this._dragMoved) {
+        // Follow the finger, but damped, so the photo feels attached to it
+        // without sliding entirely off the plate.
+        el.style.transform = `translateX(${this._dragDelta * 0.82}px)`;
+        el.classList.add('memora-plate-dragging');
+      }
+    }, { passive: true });
+
+    const endDrag = () => {
+      if (this._dragStartX === null) return;
+
+      const delta = this._dragDelta;
+      this._dragStartX = null;
+      this._dragDelta = 0;
+
+      const el = plate();
+      if (el) {
+        el.classList.remove('memora-plate-dragging');
+        el.style.transform = '';
+      }
+
+      if (Math.abs(delta) > 48) this.navigate(delta < 0 ? 1 : -1);
+    };
+
+    on('pointerup', endDrag);
+    on('pointercancel', () => {
+      this._dragStartX = null;
+      this._dragDelta = 0;
+      const el = plate();
+      if (el) {
+        el.classList.remove('memora-plate-dragging');
+        el.style.transform = '';
+      }
     });
   }
 
@@ -236,12 +312,17 @@ export class PhotoGallery extends UIComponent {
     if (!photo) return;
     this.selectedIndex = index;
     this.showRecorder = false;
+    this._navDirection = 0;
     this.setupRealtimePhoto(photo.id);
+    // Warm the neighbours before the overlay paints, so the first arrow press
+    // is already instant.
+    this.preloadAround(index);
     this.update();
   }
 
   closeLightbox() {
     this.selectedIndex = null;
+    this._navDirection = 0;
     audioManager.stop();
     if (this.currentPhotoChannel) {
       unsubscribeChannel(this.currentPhotoChannel);
@@ -253,21 +334,81 @@ export class PhotoGallery extends UIComponent {
   handleKeyDown(e) {
     if (this.selectedIndex === null) return;
     if (e.key === 'Escape') this.closeLightbox();
-    else if (e.key === 'ArrowRight') this.navigate(1);
-    else if (e.key === 'ArrowLeft') this.navigate(-1);
+    else if (e.key === 'ArrowRight') { e.preventDefault(); this.navigate(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); this.navigate(-1); }
   }
 
+  /**
+   * Move to the next or previous frame, the way a physical lightbox does:
+   * the current photo slides out, the next slides in from the same side, and
+   * its bitmap is already decoded by the time it arrives.
+   *
+   * The swap happens in two beats because the lightbox is rebuilt wholesale —
+   * there is no way to keep both photos mounted and tween between them
+   * without a larger rewrite of the overlay. Sliding the outgoing frame clear
+   * before the swap is what makes the eye read it as one movement rather than
+   * a cut.
+   */
   navigate(direction) {
     if (this.selectedIndex === null) return;
+    if (this._navLock) return;
+
     const photos = this.orderedPhotos();
     const newIndex = this.selectedIndex + direction;
-    if (newIndex < 0 || newIndex >= photos.length) return;
+    if (newIndex < 0 || newIndex >= photos.length) {
+      // At either end, nudge the edge photo and stay put — the same small
+      // resistance a real sleeve of photographs gives you.
+      this.nudgeAtEdge(direction);
+      return;
+    }
+
+    this.preloadAround(newIndex);
+    this._navLock = true;
+    this._navDirection = direction;
 
     audioManager.stop();
-    this.selectedIndex = newIndex;
-    this.showRecorder = false;
-    this.setupRealtimePhoto(photos[newIndex].id);
-    this.update();
+
+    const plate = this._lightboxHost?.querySelector('.memora-lightbox-plate');
+    if (plate) {
+      plate.classList.add(direction > 0 ? 'memora-plate-out-left' : 'memora-plate-out-right');
+    }
+
+    setTimeout(() => {
+      this.selectedIndex = newIndex;
+      this.showRecorder = false;
+      this.setupRealtimePhoto(photos[newIndex].id);
+      this.update();
+      this._navLock = false;
+    }, NAV_OUT_MS);
+  }
+
+  /** Resistance feedback when there is nothing further in that direction. */
+  nudgeAtEdge(direction) {
+    const plate = this._lightboxHost?.querySelector('.memora-lightbox-plate');
+    if (!plate || this._navLock) return;
+
+    const nudge = direction > 0 ? 'memora-plate-nudge-left' : 'memora-plate-nudge-right';
+    plate.classList.remove(nudge);
+    // Re-adding the class restarts the animation.
+    void plate.offsetWidth;
+    plate.classList.add(nudge);
+  }
+
+  /**
+   * Warm the browser cache for the frames either side of the one being shown.
+   *
+   * Without this, moving to an unseen photo fetches it on demand and the plate
+   * sits empty for a beat — the single biggest thing that stops the lightbox
+   * feeling like a real one.
+   */
+  preloadAround(index) {
+    const photos = this.orderedPhotos();
+    for (const offset of [1, -1, 2]) {
+      const photo = photos[index + offset];
+      if (!photo?.r2Url) continue;
+      const img = new Image();
+      img.src = photo.r2Url;
+    }
   }
 
   setupRealtimePhoto(photoId) {
@@ -521,6 +662,15 @@ export class PhotoGallery extends UIComponent {
     const number = String(position).padStart(2, '0');
     const audioNotes = photo.audioNotes || [];
 
+    // Arriving from a direction gets a matching entrance; opening the lightbox
+    // (direction 0) just fades up in place.
+    const enter =
+      this._navDirection > 0
+        ? 'memora-plate-in-left'
+        : this._navDirection < 0
+          ? 'memora-plate-in-right'
+          : 'memora-plate-in-place';
+
     return `
       <div class="lightbox-overlay memora-lightbox" role="dialog" aria-modal="true" aria-label="Photograph ${position} of ${total}">
         <button class="btn-close-lightbox memora-lightbox-close" aria-label="Close photo">
@@ -544,8 +694,8 @@ export class PhotoGallery extends UIComponent {
 
         <div class="lightbox-content memora-lightbox-content">
           <figure class="memora-lightbox-stage">
-            <div class="memora-lightbox-plate">
-              <img src="${photo.r2Url}" alt="${photo.caption || 'Shared memory'}" />
+            <div class="memora-lightbox-plate ${enter}">
+              <img src="${photo.r2Url}" alt="${photo.caption || 'Shared memory'}" draggable="false" />
             </div>
 
             <figcaption class="memora-lightbox-caption">
@@ -664,12 +814,12 @@ export class PhotoGallery extends UIComponent {
   }
 
   onUpdate() {
+    this.syncLightbox();
+
     // The lightbox DOM was left untouched above, so the recorder already on
     // screen is still the right one — rebuilding it here would be the very
     // teardown the flag exists to prevent.
     if (this._recording) return;
-
-    this.syncLightbox();
 
     if (this.showRecorder && this.selectedIndex !== null) {
       const photo = this.orderedPhotos()[this.selectedIndex];

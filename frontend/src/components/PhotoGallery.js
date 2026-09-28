@@ -37,6 +37,16 @@ export class PhotoGallery extends UIComponent {
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.touchStartX = 0;
     this._keydownBound = false;
+
+    /**
+     * True from the moment a take starts until it has been saved.
+     *
+     * The lightbox is rebuilt by assigning innerHTML, so a re-render mid-take
+     * would destroy the recorder — leaving an orphaned microphone, a runaway
+     * countdown and a note saved twice. Holding the flag keeps the DOM (and the
+     * recording) intact for the length of one short recording.
+     */
+    this._recording = false;
   }
 
   onMount() {
@@ -183,6 +193,11 @@ export class PhotoGallery extends UIComponent {
   /** Push the current lightbox markup into the body-level host. */
   syncLightbox() {
     if (!this._lightboxHost) return;
+
+    // See `this._recording`: rebuilding now would rip the recorder out from
+    // under an in-progress take. The pending change lands as soon as it ends.
+    if (this._recording) return;
+
     this._lightboxHost.innerHTML = this.renderLightbox();
     this.refreshIcons();
   }
@@ -649,6 +664,11 @@ export class PhotoGallery extends UIComponent {
   }
 
   onUpdate() {
+    // The lightbox DOM was left untouched above, so the recorder already on
+    // screen is still the right one — rebuilding it here would be the very
+    // teardown the flag exists to prevent.
+    if (this._recording) return;
+
     this.syncLightbox();
 
     if (this.showRecorder && this.selectedIndex !== null) {
@@ -660,10 +680,23 @@ export class PhotoGallery extends UIComponent {
         'galleryRecorder',
         new AudioRecorder({
           photoId: photo.id,
+          onStateChange: (recording) => {
+            this._recording = recording;
+          },
           onRecorded: (newNote) => {
-            if (!photo.audioNotes) photo.audioNotes = [];
-            photo.audioNotes.unshift(newNote);
+            const current = this.orderedPhotos()[this.selectedIndex];
+            if (current) {
+              if (!current.audioNotes) current.audioNotes = [];
+              // The server broadcasts `audio:added` to this client as well as
+              // answering the request, so whichever arrives first has already
+              // put the note in the list. Match the guard the reaction path and
+              // the realtime path both use, or the note shows up twice.
+              if (!current.audioNotes.some((n) => n.id === newNote.id)) {
+                current.audioNotes.unshift(newNote);
+              }
+            }
             this.showRecorder = false;
+            this._recording = false;
             this.update();
           },
         }),

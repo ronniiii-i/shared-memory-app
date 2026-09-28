@@ -20,7 +20,43 @@ export class AudioRecorder extends UIComponent {
     });
   }
 
+  /**
+   * Release the microphone and the countdown.
+   *
+   * Without this an unmounted recorder keeps its timer running and its mic
+   * open — the countdown would keep firing `stopRecording` against a component
+   * that is no longer on screen, and the browser shows a recording indicator for
+   * a take the user can no longer stop.
+   */
+  onUnmount() {
+    this.releaseRecorder();
+    this.props.onStateChange?.(false);
+  }
+
+  /** Stop the timer and hand back the mic without saving a take. */
+  releaseRecorder() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+
+    const recorder = this.mediaRecorder;
+    this.mediaRecorder = null;
+
+    if (recorder) {
+      // Discard rather than upload: nothing is waiting on this take any more.
+      recorder.onstop = null;
+      if (recorder.state !== 'inactive') recorder.stop();
+      recorder.stream?.getTracks().forEach((track) => track.stop());
+    }
+
+    this.audioChunks = [];
+    this.isRecording = false;
+  }
+
   async startRecording() {
+    if (this.isRecording) return;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -40,6 +76,8 @@ export class AudioRecorder extends UIComponent {
       this.secondsLeft = 10;
       this.update();
 
+      // Clear before creating, so a re-entry can never stack two countdowns.
+      if (this.timerInterval) clearInterval(this.timerInterval);
       this.timerInterval = setInterval(() => {
         this.secondsLeft -= 1;
         if (this.secondsLeft <= 0) {
@@ -49,6 +87,8 @@ export class AudioRecorder extends UIComponent {
           if (timerEl) timerEl.textContent = `0:0${this.secondsLeft}`;
         }
       }, 1000);
+
+      this.props.onStateChange?.(true);
 
     } catch (err) {
       toast.error(`Microphone access error: ${err.message}`);
@@ -88,6 +128,9 @@ export class AudioRecorder extends UIComponent {
       }
     } catch (err) {
       toast.error(`Failed to save voice note: ${err.message}`);
+    } finally {
+      // The take is over either way, so the host is free to re-render again.
+      this.props.onStateChange?.(false);
     }
   }
 

@@ -4,14 +4,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Memora — A collaborative space for collecting and reliving shared moments." />
+    <meta name="description" content="Memora is a shared place for the photographs, stories and voice notes you want to keep close. Start an album, invite your people, and relive the good stuff together." />
     <meta name="theme-color" content="#C85A32" />
+    <meta name="color-scheme" content="dark light" />
 
     <title>Memora — Shared moments, kept close</title>
+
+  
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Memora" />
+    <meta property="og:title" content="Memora — Shared moments, kept close" />
+    <meta property="og:description" content="A shared place for the photographs, stories and voice notes you want to keep close. Start an album, invite your people, and relive the good stuff together." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Memora — a stack of scrapbook pages beside a pinned photograph, with the words 'Keep the moments that matter'." />
+    <meta property="og:url" content="/" />
+    <meta property="og:locale" content="en" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Memora — Shared moments, kept close" />
+    <meta name="twitter:description" content="A shared place for the photographs, stories and voice notes you want to keep close." />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="Memora — a stack of scrapbook pages beside a pinned photograph." />
+
+    <link rel="canonical" href="/" />
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>" />
+    <link rel="apple-touch-icon" href="/og-image.png" />
 
     <!-- Google Fonts: Newsreader (Editorial Serif) + Plus Jakarta Sans & Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -45,6 +67,28 @@
 
     <!-- Emoji Layer -->
     <div id="emoji-layer" class="emoji-layer"></div>
+
+  
+    <script>
+      (function () {
+        var origin = window.location.origin;
+        var absolute = [
+          ['meta[property="og:url"]', 'content'],
+          ['meta[property="og:image"]', 'content'],
+          ['meta[property="og:image:secure_url"]', 'content'],
+          ['meta[name="twitter:image"]', 'content'],
+          ['meta[name="twitter:url"]', 'content'],
+          ['link[rel="canonical"]', 'href']
+        ];
+        for (var i = 0; i < absolute.length; i++) {
+          var el = document.head.querySelector(absolute[i][0]);
+          if (!el) continue;
+          var attr = absolute[i][1];
+          var value = el.getAttribute(attr) || '';
+          if (value.charAt(0) === '/') el.setAttribute(attr, origin + value);
+        }
+      })();
+    </script>
 
     <!-- Main Entry Script -->
     <script type="module" src="/main.js"></script>

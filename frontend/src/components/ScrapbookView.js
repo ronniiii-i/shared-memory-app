@@ -27,6 +27,8 @@ export class ScrapbookView extends UIComponent {
     this.codeDraft = null;
     this.codeError = '';
     this.isSavingCode = false;
+
+    this._tabStripObserver = null;
   }
 
   async onMount() {
@@ -73,13 +75,51 @@ export class ScrapbookView extends UIComponent {
     this.delegate('submit', '#edit-code-form', (e) => this.handleSaveCode(e));
 
     this.mountTabContent();
+    this.watchTabStrip();
   }
 
   onUnmount() {
     this._fetched = false;
+    this._tabStripObserver?.disconnect();
+    this._tabStripObserver = null;
     if (this.unsubscribePusher) {
       this.unsubscribePusher();
     }
+  }
+
+  /**
+   * Mark which ends of the tab strip still have tabs sitting beyond them.
+   *
+   * The strip is a horizontal scroller with its scrollbar hidden, so on a
+   * phone nothing else says that "Recap" and "Settings" are off screen. The
+   * two flags it sets drive the edge fades in main.css.
+   *
+   * `scroll` does not bubble, so this has to be bound to the strip itself
+   * rather than delegated. `on()` tracks the listener, which means every
+   * `update()` tears the old one down with the DOM it was attached to.
+   */
+  watchTabStrip() {
+    const strip = this.element?.querySelector('.memora-tabset');
+    if (!strip) return;
+
+    const sync = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      // Sub-pixel layout widths otherwise leave an edge fade lit at the very
+      // end of the scroll, which reads as "there is more" when there is not.
+      const scrollable = max > 1;
+      strip.classList.toggle('is-more-left', scrollable && strip.scrollLeft > 1);
+      strip.classList.toggle('is-more-right', scrollable && strip.scrollLeft < max - 1);
+    };
+
+    this.on(strip, 'scroll', sync, { passive: true });
+    sync();
+
+    // Rotating the phone changes the strip's width, which changes which tabs
+    // are out of view — without this the flags would only ever reflect the
+    // width the album happened to open at.
+    this._tabStripObserver?.disconnect();
+    this._tabStripObserver = new ResizeObserver(sync);
+    this._tabStripObserver.observe(strip);
   }
 
   async fetchData() {
